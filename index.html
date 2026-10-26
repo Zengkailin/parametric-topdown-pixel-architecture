@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Topdown 建筑工坊 · 网页版 v1.0</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231d222a'/%3E%3Cpath d='M6 15 16 7l10 8v10H6z' fill='%23d3a94e'/%3E%3Cpath d='M12 25v-6h8v6z' fill='%23373a34'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app">
+	<header class="topbar">
+		<div class="brand">
+			<h1>Topdown 建筑工坊 · 网页版 <span class="ver" id="appVersion">v1.0</span></h1>
+			<small>参数化建筑 → 俯视像素图 · 复刻 Jeff Studio 插件 · 不依赖 Godot、不计算光照</small>
+		</div>
+		<span class="badge" id="styleBadge">江南古镇</span>
+		<button class="btn" id="btnWorkshop">风格工坊</button>
+		<button class="btn ghost" id="btnHelp">贴图规范</button>
+	</header>
+
+	<main class="main">
+		<aside class="sidebar">
+			<div class="sidebar-head">
+				<strong>建筑与视角参数</strong>
+				<span class="hint">改动后自动重建预览</span>
+			</div>
+			<div class="form" id="form">
+				<div class="section">
+					<h2>建筑来源</h2>
+					<div class="field">
+						<label for="styleSelect">建筑风格（材质 + 几何族）</label>
+						<select id="styleSelect"></select>
+					</div>
+					<div class="field" style="margin-top:8px">
+						<label for="categorySelect">建筑大类</label>
+						<select id="categorySelect"></select>
+					</div>
+					<div class="field" style="margin-top:8px">
+						<label for="typeSelect">具体建筑</label>
+						<select id="typeSelect"></select>
+					</div>
+					<div class="field" style="margin-top:8px">
+						<label for="lookSelect">建筑外观</label>
+						<select id="lookSelect">
+							<option value="0">原色</option>
+							<option value="1">素雅</option>
+							<option value="2">暖色</option>
+							<option value="3">风化</option>
+						</select>
+					</div>
+					<p class="note" id="styleNote">风格决定几何做法（江南 / 欧式木构 / 沙漠 / 町屋 / 雪乡 / 海港 / 宫阙 / 哥特 / 蒸汽）与整套材质图集。</p>
+				</div>
+
+				<div class="section">
+					<h2>种子</h2>
+					<div class="row"><span class="label">外形种子<small>决定开间、层数与屋顶取值</small></span>
+						<input type="number" data-scope="root" data-key="shapeSeed" min="0" max="2147483647" step="1" value="60421">
+					</div>
+					<div class="row"><span class="label">细节种子<small>决定装饰与配件分布</small></span>
+						<input type="number" data-scope="root" data-key="detailSeed" min="0" max="2147483647" step="1" value="101">
+					</div>
+					<div class="row"><span class="label">外观种子<small>只影响材质微差</small></span>
+						<input type="number" data-scope="root" data-key="appearanceSeed" min="0" max="2147483647" step="1" value="101">
+					</div>
+					<div class="seed-actions">
+						<button class="btn small" id="btnRandomBuilding">随机建筑</button>
+						<button class="btn small" id="btnRandomDetail">仅随机细节</button>
+						<button class="btn small" id="btnReplay">按种子重现</button>
+					</div>
+				</div>
+
+				<div class="section">
+					<h2>建筑参数</h2>
+					<div class="row" data-field="width"><span class="label">建筑宽度（米）</span>
+						<input type="number" data-scope="params" data-key="width" min="3" max="10" step="0.25" value="6"></div>
+					<div class="row" data-field="depth"><span class="label">建筑进深（米）</span>
+						<input type="number" data-scope="params" data-key="depth" min="0.5" max="10" step="0.25" value="4.75"></div>
+					<div class="row" data-field="floors"><span class="label">楼层数</span>
+						<input type="number" data-scope="params" data-key="floors" min="1" max="3" step="1" value="1"></div>
+					<div class="row" data-field="pitch"><span class="label">屋顶坡度（°）</span>
+						<input type="number" data-scope="params" data-key="pitch" min="15" max="50" step="1" value="32"></div>
+					<div class="row" data-field="eave"><span class="label">出檐宽度（米）</span>
+						<input type="number" data-scope="params" data-key="eave" min="0.1" max="1" step="0.05" value="0.55"></div>
+					<div class="row" data-field="windows"><span class="label">每面窗列</span>
+						<input type="number" data-scope="params" data-key="windows" min="1" max="4" step="1" value="2"></div>
+					<div class="row" data-field="height"><span class="label">结构高度（米）</span>
+						<input type="number" data-scope="params" data-key="height" min="0.3" max="10" step="0.1" value="3.2"></div>
+					<div class="row" data-field="bays"><span class="label">分段 / 栏位数量</span>
+						<input type="number" data-scope="params" data-key="bays" min="1" max="6" step="1" value="3"></div>
+					<div class="field" data-field="roof" style="margin-top:6px">
+						<label for="roofSelect">屋顶形态</label>
+						<select id="roofSelect" data-scope="params" data-key="roof">
+							<option value="0">按风格</option>
+							<option value="1">双坡屋顶</option>
+							<option value="2">平顶露台</option>
+						</select>
+					</div>
+					<label class="check" data-field="porch"><input type="checkbox" data-scope="params" data-key="porch" checked> 门廊</label>
+					<label class="check" data-field="balcony"><input type="checkbox" data-scope="params" data-key="balcony"> 二层栏廊</label>
+					<label class="check" data-field="ornament"><input type="checkbox" data-scope="params" data-key="ornament" checked> 屋顶附件与装饰</label>
+				</div>
+
+				<div class="section">
+					<h2>俯视视角</h2>
+					<div class="field">
+						<label for="projectionSelect">投影方式</label>
+						<select id="projectionSelect" data-scope="view" data-key="projection">
+							<option value="0">正交（无透视、无消失点）</option>
+							<option value="1">透视（有消失点）</option>
+						</select>
+					</div>
+					<div class="row" style="margin-top:6px"><span class="label">俯角（°）· 90 正俯视 / 0 平视</span>
+						<input type="number" data-scope="view" data-key="pitch" min="0" max="90" step="1" value="45"></div>
+					<div class="field" style="margin-top:6px">
+						<label for="dirsSelect">方向数量</label>
+						<select id="dirsSelect" data-scope="view" data-key="directions">
+							<option value="0">1 向</option>
+							<option value="1">2 向</option>
+							<option value="2" selected>4 向</option>
+							<option value="3">8 向</option>
+						</select>
+					</div>
+					<div class="row" style="margin-top:6px"><span class="label">起始朝向（°）· 0 为 +Z 正面</span>
+						<input type="number" data-scope="view" data-key="baseYaw" min="-180" max="180" step="1" value="0"></div>
+					<div class="row" data-view-field="fov"><span class="label">透视视角 FOV（°）· 0 = 正交极限</span>
+						<input type="number" data-scope="view" data-key="fov" min="0" max="100" step="1" value="50"></div>
+					<div class="field" style="margin-top:6px">
+						<label for="pixelSelect">画面尺寸（像素）</label>
+						<select id="pixelSelect" data-scope="view" data-key="pixelSize">
+							<option value="0">128</option>
+							<option value="1">256</option>
+							<option value="2">384</option>
+							<option value="3" selected>512</option>
+							<option value="4">768</option>
+							<option value="5">1024</option>
+							<option value="6">自适应（按像素密度计算）</option>
+						</select>
+					</div>
+					<div class="field" style="margin-top:6px">
+						<label for="scaleSelect">画面缩放</label>
+						<select id="scaleSelect" data-scope="view" data-key="scaleMode">
+							<option value="0">自动适配建筑尺寸</option>
+							<option value="1">固定像素密度（像素/米）</option>
+						</select>
+					</div>
+					<div class="row" data-view-field="ppm" style="margin-top:6px"><span class="label">像素密度（像素/米）</span>
+						<input type="number" data-scope="view" data-key="pixelsPerMeter" min="4" max="200" step="1" value="48"></div>
+					<div class="row" data-view-field="padding"><span class="label">留白（%）</span>
+						<input type="number" data-scope="view" data-key="padding" min="0" max="40" step="1" value="8"></div>
+					<div class="row" data-view-field="outlineInner"><span class="label">内描边宽度（像素）· 0 关闭</span>
+						<input type="number" data-scope="render" data-key="outlineInner" min="0" max="16" step="0.5" value="0"></div>
+					<div class="row" data-view-field="outlineOuter"><span class="label">部件外描边宽度（像素）· 每部件向外扩，0 关闭</span>
+						<input type="number" data-scope="render" data-key="outlineOuter" min="0" max="16" step="0.5" value="0"></div>
+					<div class="row" data-view-field="outlineSilhouette"><span class="label">轮廓描边宽度（像素）· 整栋剪影外扩，0 关闭</span>
+						<input type="number" data-scope="render" data-key="outlineSilhouette" min="0" max="16" step="0.5" value="0"></div>
+					<label class="check"><input type="checkbox" data-scope="render" data-key="antialias" checked> 抗锯齿（2× 超采样）</label>
+					<div class="field">
+						<label for="bgSelect">背景</label>
+						<select id="bgSelect" data-scope="render" data-key="background">
+							<option value="0">透明</option>
+							<option value="1">纯色</option>
+						</select>
+					</div>
+					<div class="row" style="margin-top:6px"><span class="label">背景颜色</span>
+						<input type="color" data-scope="render" data-key="backgroundColor" value="#2a2e33"></div>
+					<details class="advanced">
+						<summary>描边颜色 / 阈值</summary>
+						<div class="row"><span class="label">内描边颜色</span>
+							<input type="color" data-scope="render" data-key="outlineColor" value="#140f0d"></div>
+						<div class="row"><span class="label">部件外描边颜色</span>
+							<input type="color" data-scope="render" data-key="outlineColorOuter" value="#140f0d"></div>
+						<div class="row"><span class="label">轮廓描边颜色</span>
+							<input type="color" data-scope="render" data-key="outlineColorSilhouette" value="#140f0d"></div>
+						<div class="row"><span class="label">深度断层阈值</span>
+							<input type="number" data-scope="render" data-key="depthThreshold" min="0.01" max="1" step="0.01" value="0.15"></div>
+						<div class="row"><span class="label">法线断层阈值</span>
+							<input type="number" data-scope="render" data-key="normalThreshold" min="0.01" max="1" step="0.01" value="0.3"></div>
+						<p class="note">内描边只画在该部件自己的像素上（轮廓、折面断层、部件分界，向内部加粗）；部件外描边把每个部件的剪影向外扩，允许压到别的部件上，重叠处「距离更近者赢，同距靠前者赢」；轮廓描边只把整栋建筑的剪影外扩到背景上。三者宽度与颜色独立，0 为关闭。</p>
+					</details>
+					<p class="note">正交投影没有消失点；透视投影会随 FOV 产生消失点。FOV 0° 是透视的极限——相机距离趋于无穷，等价于正交投影，工具会自动按正交出图并标注「正交极限」。<br>俯角只改变看见立面与屋顶的比例：90° 即纯顶视，0° 为平视（纯立面）。<br>自适应画布会按像素密度与建筑投影范围自动计算宽高；固定像素密度则 1 米 = 指定像素。</p>
+				</div>
+
+				<div class="section">
+					<h2>说明</h2>
+					<p class="note">
+						本工具只保留<strong>几何 + 材质</strong>：不计算日光、阴影、环境光，也不做色调映射。
+						明暗完全来自材质图集本身的像素笔触，因此输出稳定、可批量复现。<br>
+						参数语义与 Godot 插件 <code>topdown_building_studio</code> 一致（网格单位：米，+Z 为正面）。<br>
+						预览里<strong>点击任意部件</strong>可查看它引用的纹理，并单独染色、替换贴图或设置部件级描边（只作用于当前建筑）。
+					</p>
+				</div>
+			</div>
+		</aside>
+
+		<section class="stage">
+			<div class="stage-bar">
+				<span class="chip">画布 <b id="chipCanvas">—</b></span>
+				<span class="chip">投影 <b id="chipProj">—</b></span>
+				<span class="chip">俯角 <b id="chipPitch">—</b></span>
+				<span class="chip">方向 <b id="chipDirs">—</b></span>
+				<span class="chip clickable" id="pickHint">点击画面部件可查看纹理</span>
+				<button class="btn small ghost" id="btnClearParts" title="把所有部件的染色、贴图、描边恢复为初始状态" hidden>重置全部部件</button>
+				<span class="spacer"></span>
+				<button class="btn small" id="btnTemplate">下载图集模板</button>
+				<button class="btn small ghost" id="btnReset">恢复默认参数</button>
+			</div>
+
+			<div class="preview-wrap" id="previewWrap">
+				<canvas id="previewCanvas" width="512" height="512"></canvas>
+				<div class="preview-empty" id="previewEmpty">正在准备…</div>
+			</div>
+
+			<div class="stage-bar">
+				<span class="note" style="margin:0">预览缩放</span>
+				<button class="btn small" id="btnZoomOut">－</button>
+				<span class="chip" id="zoomLabel">100%</span>
+				<button class="btn small" id="btnZoomIn">＋</button>
+				<button class="btn small ghost" id="btnZoomReset">复位</button>
+				<span class="note" style="margin:0 0 0 8px">滚轮缩放 · 拖拽平移 · 双击复位</span>
+				<span class="spacer"></span>
+				<button class="btn small" id="btnExportCurrent">导出当前方向</button>
+				<button class="btn small" id="btnExportAll">导出全部方向 + 精灵表</button>
+				<button class="btn small ghost" id="btnExportRecipe">导出配方 JSON</button>
+			</div>
+
+			<div class="status" id="status">正在准备…</div>
+
+			<div class="inspector" id="inspector" hidden>
+				<div class="insp-thumb" id="inspThumb" title="该部件当前引用的纹理"></div>
+				<div class="insp-main">
+					<div class="insp-title">
+						<b id="inspName">—</b>
+						<code id="inspRole">—</code>
+						<span class="chip" id="inspOrigin">—</span>
+					</div>
+					<div class="insp-hint" id="inspHint">点击画面中的部件查看它引用的纹理；下面的调整只作用于当前建筑，不改动风格。</div>
+				</div>
+				<div class="insp-controls">
+					<label class="insp-color" title="按颜色乘算纹理，保留像素细节">染色
+						<input type="color" id="inspTint" value="#ffffff">
+					</label>
+					<button class="btn small" id="inspUpload">替换纹理</button>
+					<button class="btn small" id="inspLibrary" title="列出所有已导入的纹理（内置 + 自定义）中同一部件的贴图，点一下即替换">从纹理库选择</button>
+					<div class="insp-outline">
+						<span class="insp-tag">内描边</span>
+						<label class="check"><input type="checkbox" id="inspInnerInherit" checked> 继承</label>
+						<input type="number" class="insp-width" id="inspInner" min="0" max="16" step="0.5" placeholder="继承" disabled>
+						<input type="color" id="inspInnerColor" value="#140f0d" disabled>
+					</div>
+					<div class="insp-outline">
+						<span class="insp-tag">外描边</span>
+						<label class="check"><input type="checkbox" id="inspOuterInherit" checked> 继承</label>
+						<input type="number" class="insp-width" id="inspOuter" min="0" max="16" step="0.5" placeholder="继承" disabled>
+						<input type="color" id="inspOuterColor" value="#140f0d" disabled>
+					</div>
+					<button class="btn small ghost" id="inspReset" title="把该部件的染色、贴图、描边恢复为初始状态">重置</button>
+					<button class="btn small ghost" id="inspClose" title="关闭检查器">×</button>
+				</div>
+			</div>
+
+			<div class="actions">
+				<button class="btn primary" id="btnRefresh">① 刷新预览 · 只更新画面，不写文件</button>
+				<button class="btn" id="btnSavePng">② 导出当前方向 · 只存 dir_0.png</button>
+				<button class="btn" id="btnSaveAll">③ 导出全部方向 · 各方向帧 + sheet.png（ZIP）</button>
+			</div>
+
+			<div class="stats">
+				<span>三角面 <b id="statTris">—</b></span>
+				<span>风格 <b id="statStyle">—</b></span>
+				<span>建筑 <b id="statType">—</b></span>
+				<span>耗时 <b id="statTime">—</b></span>
+				<span>渲染 <b id="statRenderer">纯 JS 软件光栅 · 无光照</b></span>
+			</div>
+		</section>
+	</main>
+</div>
+
+<!-- ===================== 风格工坊 ===================== -->
+<div class="modal" id="workshopModal">
+	<div class="dialog">
+		<div class="dialog-head">
+			<h2>风格工坊 · 建筑材质与风格</h2>
+			<span class="badge" id="workshopModeBadge">内置风格</span>
+			<span class="spacer"></span>
+			<button class="btn small" id="btnNewStyle">新建风格</button>
+			<button class="btn small" id="btnImportStyles">导入风格包</button>
+			<button class="btn small ghost" id="btnExportStyles">导出全部风格</button>
+			<button class="btn small ghost" id="btnCloseWorkshop">关闭</button>
+		</div>
+		<div class="dialog-body">
+			<div class="style-list" id="styleList"></div>
+			<div class="editor" id="styleEditor">
+				<div class="editor-empty note">在左侧选择一个风格，或点「新建风格」。</div>
+			</div>
+		</div>
+		<div class="dialog-foot">
+			<button class="btn danger small" id="btnDeleteStyle" disabled>删除此风格</button>
+			<span class="spacer"></span>
+			<span class="note" style="margin:0">用户风格保存在本机浏览器（localStorage），可导出为 JSON 迁移。</span>
+			<button class="btn ghost" id="btnCancelStyle">取消</button>
+			<button class="btn primary" id="btnSaveStyle">保存风格</button>
+		</div>
+	</div>
+</div>
+
+<!-- ===================== 纹理库（部件级换图） ===================== -->
+<div class="modal" id="textureModal">
+	<div class="dialog narrow">
+		<div class="dialog-head">
+			<h2 id="texTitle">纹理库 · 同部件贴图</h2>
+			<span class="badge" id="texRole">—</span>
+			<span class="spacer"></span>
+			<button class="btn small ghost" id="btnCloseTexture">关闭</button>
+		</div>
+		<div class="dialog-body single">
+			<div class="tex-body">
+				<p class="note" id="texNote" style="margin:0 0 10px">正在收集全部已导入纹理…</p>
+				<div class="tex-grid" id="texGrid"></div>
+			</div>
+		</div>
+		<div class="dialog-foot">
+			<span class="note" style="margin:0" id="texFoot">取各风格该角色的原始贴图（不含外观染色与微差）；只换当前建筑的这一个部件，不改动任何风格。</span>
+			<span class="spacer"></span>
+			<button class="btn small ghost" id="btnTextureClear" hidden>改用风格原纹理</button>
+		</div>
+	</div>
+</div>
+
+<!-- ===================== 规范说明 ===================== -->
+<div class="modal" id="helpModal">
+	<div class="dialog narrow">
+		<div class="dialog-head">
+			<h2>建筑材质贴图规范 · 参数说明</h2>
+			<span class="spacer"></span>
+			<button class="btn small ghost" id="btnCloseHelp">关闭</button>
+		</div>
+		<div class="help">
+			<h3>1. 图集格式（推荐）</h3>
+			<ul>
+				<li>一张正方形 PNG，边长能被 4 整除（建议 512 或 1024，即 128 或 256 像素一格）。</li>
+				<li>4 × 4 = 16 格，顺序固定（与插件的 <code>building_materials_v5.gd</code> / <code>building_materials_v6.gd</code> 一致）：</li>
+			</ul>
+			<table>
+				<tr><th>行 1</th><td><code>roof</code> 屋顶瓦</td><td><code>wood</code> 木构件</td><td><code>wall</code> 墙面</td><td><code>stone</code> 石作</td></tr>
+				<tr><th>行 2</th><td><code>trim</code> 饰条</td><td><code>glass</code> 玻璃</td><td><code>cloth</code> 布幔</td><td><code>metal</code> 金属</td></tr>
+				<tr><th>行 3</th><td><code>shadow</code> 内影</td><td><code>accent</code> 点缀</td><td><code>door</code> 门扇</td><td><code>window</code> 窗扇</td></tr>
+				<tr><th>行 4</th><td><code>roof_edge</code> 瓦口</td><td><code>wall_base</code> 墙裙</td><td><code>sign</code> 招牌</td><td><code>shutter</code> 百叶</td></tr>
+			</table>
+			<ul>
+				<li><b>可平铺角色</b>（除 door/window/sign/shutter/wall_base/roof_edge 外）：应能无缝四方连续，工具会自动把首尾像素取平均以消除接缝。</li>
+				<li><b>构件角色</b>：整格使用，请把主体画满整格（门、窗、招牌、百叶建议留极窄边或直接满幅）。</li>
+				<li>透明像素按“无材质”处理（会露底），因此请把 alpha 补齐；贴图内部禁止大面积透明。</li>
+				<li>运行时按<b>最近邻采样，绝不做双线性/平滑插值</b>：<code>roof</code> 格统一到 64px，其余统一到 128px。
+					例如 256×256 图集 = 64px/格：屋顶 1:1，其余 2× 最近邻放大（每个源像素变成 2×2 色块，不会变模糊）；
+					512×512 图集 = 128px/格：其余 1:1、屋顶 2× 缩小；1024×1024 = 256px/格：全部 2× 缩小。</li>
+				<li>只有两处会产生“平均色”，都是插件同款的预滤波：一是可平铺角色最外圈 1px 的接缝混合；二是缩小时按 mip 层级最近邻取样（等价 NEAREST_WITH_MIPMAPS）。放大时永远取 mip 0，不会模糊。</li>
+				<li>如果画面偏软，先关掉「抗锯齿」——那是 2× 超采样后盒式降采样，会平均边缘像素；材质放大本身不模糊。</li>
+			</ul>
+
+			<h3>2. 逐角色贴图（可选）</h3>
+			<ul>
+				<li>也可以为单个角色单独上传一张正方形 PNG（同样会被缩到 64 / 128），用于替换图集中对应格。</li>
+				<li>未上传的角色优先取图集对应格；既无图集也无单图时，用调色板按插件 v3 的像素配方程序化生成。</li>
+				<li>预览里点中部件后，检查器的「替换纹理」可上传单张 PNG；「从纹理库选择」会把<b>当前所有已导入的纹理（内置风格 + 自定义风格）</b>里同一角色的贴图列出来，
+					点一下即换成那个风格的同部件贴图（最近邻缩放到 64 / 128，与图集同规则），只作用于当前建筑并写入配方 JSON 的 <code>parts.&lt;角色&gt;.textureFrom</code>。</li>
+			</ul>
+
+			<h3>3. 参数与插件对应关系</h3>
+			<table>
+				<tr><th>工具参数</th><th>插件参数</th><th>说明</th></tr>
+				<tr><td>建筑宽度 / 进深</td><td><code>width</code> / <code>depth</code></td><td>米；中心建筑（kind=2）自动放大 12% / 8%</td></tr>
+				<tr><td>楼层数</td><td><code>floors</code></td><td>1–3；每层 2.8 米</td></tr>
+				<tr><td>屋顶坡度 / 出檐</td><td><code>pitch</code> / <code>eave</code></td><td>坡度 15–50°，出檐 0.1–1 米</td></tr>
+				<tr><td>每面窗列</td><td><code>windows</code></td><td>1–4；门洞会占用正立面中间区间</td></tr>
+				<tr><td>结构高度 / 栏位</td><td><code>height</code> / <code>bays</code></td><td>谷仓、棚屋、围墙、码头、废墟等原型使用</td></tr>
+				<tr><td>屋顶形态</td><td><code>roof</code></td><td>0 按风格 / 1 双坡 / 2 平顶露台</td></tr>
+				<tr><td>门廊 / 二层栏廊 / 装饰</td><td><code>porch</code> / <code>balcony</code> / <code>ornament</code></td><td>栏廊需 ≥2 层且非沙漠风格</td></tr>
+				<tr><td>外形 / 细节 / 外观种子</td><td><code>shape_seed</code> / <code>detail_seed</code> / <code>appearance_seed</code></td><td>同一种子在本工具内结果固定</td></tr>
+				<tr><td>俯角 / 方向 / 起始朝向</td><td><code>view_pitch</code> / <code>directions</code> / <code>base_yaw</code></td><td>俯角 0–90°（0=平视，90=纯顶视）；方向 1/2/4/8，帧名 dir_0…dir_N</td></tr>
+				<tr><td>投影 / FOV</td><td><code>projection</code> / <code>fov</code></td><td>正交无消失点；透视 0–100°（0° = 正交极限，自动按正交出图）</td></tr>
+				<tr><td>画面尺寸 / 缩放 / 像素密度 / 留白</td><td><code>pixel_size</code> / <code>scale_mode</code> / <code>pixels_per_meter</code> / <code>padding</code></td><td>自适应 = 按投影范围算画布</td></tr>
+				<tr><td>内描边 / 部件外描边 / 轮廓描边</td><td><code>outlineInner</code> / <code>outlineOuter</code> / <code>outlineSilhouette</code></td><td>内描边只盖该部件自己的像素；外描边对每个部件向外扩（可压到别的部件）；轮廓描边只包整栋剪影（插件是单个 <code>outline</code>）</td></tr>
+			</table>
+
+			<h3>4. 部件检查器（点击拾取）</h3>
+			<ul>
+				<li>在预览里点击任意部位：渲染时会写一张“角色索引”拾取缓冲，直接告诉你这块面用的是哪个材质角色
+					（<code>roof</code> / <code>wood</code> / <code>wall</code> / <code>stone</code> / <code>door</code>…）。</li>
+				<li>检查器显示该部件<strong>当前引用的纹理</strong>缩略图与来源：风格图集第几行第几列、风格单角色图、程序化调色板、或部件覆盖。</li>
+				<li><strong>单独染色</strong>：颜色与纹理相乘，保留像素细节；<strong>替换纹理</strong>：上传正方形 PNG，
+					按与图集相同的规则最近邻缩放到 64 / 128。</li>
+				<li><strong>部件级描边</strong>：检查器里的「内描边 / 外描边」各有「继承」开关。默认继承面板上的全局宽度与颜色；
+					取消继承后可单独设宽度和颜色，覆盖全局。<strong>部件外描边</strong>是「这个部件向外扩一圈」，
+					可以压到相邻部件上，和「轮廓描边（整栋剪影外扩到背景）」是两件事。</li>
+				<li>覆盖只作用于<strong>当前建筑</strong>，不改动风格；会参与导出，写入 <code>recipe.json</code> 的 <code>parts</code>，
+					并随配置保存。检查器「重置」把当前部件的染色 / 贴图 / 描边恢复为初始状态；舞台栏「重置全部部件」一键清空。</li>
+				<li>点击 1px 细边或被描边盖住的位置时，会自动在 2px 邻域找最近部件；点击背景取消选中。</li>
+			</ul>
+
+			<h3>5. 与插件的差异（有意为之）</h3>
+			<ul>
+				<li><strong>不计算光照</strong>：无日光、阴影、环境光、色调映射。材质图集本身负责明暗。</li>
+				<li><strong>视角范围更宽</strong>：FOV 支持 0–100°（0° 即正交极限，工具按正交出图并标注），
+					俯角支持 0–90°（0° 平视 / 90° 纯顶视）；插件分别是 10–100° 与 5–90°。</li>
+				<li>抗锯齿用 2× 超采样 + 盒式降采样近似插件里的 4× MSAA；像素风可关闭。</li>
+				<li>纹理缩放一律最近邻：放大取 mip 0，不插值；缩小按 mip 层级取样（等价 NEAREST_WITH_MIPMAPS），
+					只有可平铺角色最外圈 1px 会做接缝平均。</li>
+				<li><strong>描边拆成三套</strong>：内描边只覆盖该部件自己的像素（轮廓、折面断层、部件分界）；
+					部件外描边对每个部件各自向外扩，可以压到别的部件上；轮廓描边只把整栋剪影外扩到背景上。
+					插件是单一 <code>outline</code>，内外由同一个宽度隐式叠加。</li>
+				<li>种子数值与 Godot 的随机序列不逐位对齐，但同一份配置在本工具内完全可复现。</li>
+				<li>构建几何的代码逐条移植自插件脚本（v6 方言 + v5 主路径 + v4 原型建筑），参数、尺寸、层级一致。</li>
+				<li>新增「部件检查器」：插件没有运行时拾取与部件级染色 / 换图；网页版在当前建筑上做覆盖，不动风格。</li>
+			</ul>
+
+			<h3>8. 内置风格一览（v5 三种 + v6 六种 + 像素江南）</h3>
+			<table>
+				<tr><th>风格</th><th>图集</th><th>几何做法</th></tr>
+				<tr><td>江南古镇</td><td><code>v5/jiangnan.png</code></td><td>曲脊歇山、木构穿斗、白墙黛瓦</td></tr>
+				<tr><td>欧式风格</td><td><code>v5/forest.png</code></td><td>陡坡双坡顶、木筋墙、外挂百叶与烟囱</td></tr>
+				<tr><td>沙漠聚落</td><td><code>v5/desert.png</code></td><td>平顶露台、分层退台、土石墙面</td></tr>
+				<tr><td>日式町屋</td><td><code>v6/machiya.png</code></td><td>十字脊瓦顶、木格窗、暖帘门、缘侧外廊</td></tr>
+				<tr><td>北欧雪乡</td><td><code>v6/nordic.png</code></td><td>陡坡覆雪顶（<code>snow</code> 程序化雪面）、百叶窗、石烟囱</td></tr>
+				<tr><td>热带海港</td><td><code>v6/harbor.png</code></td><td>缓坡四坡顶 + 屋面通风帽、缘侧布棚</td></tr>
+				<tr><td>中式宫阙</td><td><code>v6/palace.png</code></td><td>重檐歇山、朱红立柱、明黄琉璃、檐下斗拱</td></tr>
+				<tr><td>哥特城镇</td><td><code>v6/gothic.png</code></td><td>尖券窗、飞扶壁、山尖小尖塔</td></tr>
+				<tr><td>蒸汽工业</td><td><code>v6/steamworks.png</code></td><td>锯齿采光顶、玻璃天窗、锅炉烟囱与管道</td></tr>
+				<tr><td>像素江南</td><td>本地手绘像素图集</td><td>沿用江南几何，材质换成低分辨率像素</td></tr>
+			</table>
+			<p class="note">v6 六种方言与插件 <code>building_architecture_v6.gd</code> 对应：共用 46 种类型的功能骨架，
+			只在屋顶、窗、立面、门、外廊上分支；原型的屋顶（城门、塔、谷仓…）也会换成方言屋顶。
+			<code>snow</code>（积雪）不占图集格，由工具按插件配方（0.65 / 0.73 / 0.79 淡蓝白）程序化生成，仅北欧雪乡使用。</p>
+
+			<h3>6. 输出</h3>
+			<ul>
+				<li><strong>导出当前方向</strong>：<code>dir_0.png</code>，透明或纯色背景，尺寸即画布尺寸。</li>
+				<li><strong>导出全部方向</strong>：ZIP 内含 <code>dir_0.png … dir_N.png</code>、<code>sheet.png</code>（默认横排，超过 16384 px 自动换行）与 <code>recipe.json</code>（完整配方，便于复现）。</li>
+				<li>目录名规则与插件一致：<code>p&lt;俯角&gt;_&lt;方向数&gt;d[_persp&lt;FOV&gt;fov][_auto][_s&lt;像素/米&gt;ppm][_oi&lt;内描边&gt;-oo&lt;外描边&gt;[-os&lt;轮廓描边&gt;]]</code>。</li>
+				<li>「下载图集模板」导出当前风格实际使用的 4×4 图集（512px，128/格），可直接交给画师重绘后再传回。</li>
+			</ul>
+
+			<h3>7. 键盘 / 鼠标</h3>
+			<ul>
+				<li>预览区：滚轮缩放、拖拽平移、双击复位；单击拾取部件。</li>
+				<li>风格工坊：点击角色卡片上传单张纹理，点击色块修改程序化配色。</li>
+			</ul>
+		</div>
+	</div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="busy-overlay" id="busy"><span class="spinner"></span><span id="busyText">正在渲染…</span></div>
+
+<script src="js/util.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/atlases.js"></script>
+<script src="js/materials.js"></script>
+<script src="js/geometry.js"></script>
+<script src="js/view.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

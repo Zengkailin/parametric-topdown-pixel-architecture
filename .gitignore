@@ -1,0 +1,12 @@
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Developer test outputs (generated, not part of the tool)
+tools/_out/
+
+# Node / Python caches (if any dev deps used locally)
+node_modules/
+__pycache__/
+*.pyc
