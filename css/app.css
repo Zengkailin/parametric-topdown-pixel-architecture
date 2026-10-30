@@ -449,6 +449,7 @@ details.advanced[open] summary { color: var(--accent-2); margin-bottom: 4px; }
 	font-size: 12px;
 }
 .status.err { color: #e9a3a3; }
+.status.warn { color: var(--accent); }
 .status.ok { color: var(--ok); }
 
 .actions {

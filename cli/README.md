@@ -193,7 +193,7 @@ node cli/tb.js render forest inn --no-meta             :: 关闭内嵌（默认�
 
 - **不含时间戳**：同一组参数渲染出的 PNG 逐字节相同（现有自测「随机可复现」按字节比较）。
 - **贴图剥离**：部件贴图是 dataURL、体积大，入图时替换为 `textureFrom / textureBytes / textureCrc32`，`textures` 标记为 `omitted`，`inspect` 会给 `warnings`；复现时重新指定 `--part <角色>:texture=<文件>`。
-- **网页互通**：网页版导出写同样的块名与 JSON 结构（`js/pngmeta.js`），CLI 的 `inspect` 可直接读网页导出的图；反之网页导出的 `recipe.json` 也照常可用。
+- **网页互通**：网页版导出写同样的块名与 JSON 结构（`js/pngmeta.js`），CLI 的 `inspect` 可直接读网页导出的图；反之网页导出的 `recipe.json` 也照常可用。网页预览下方的「导入图片配方」按钮就是网页侧的 `inspect` + `rec apply`，能读 CLI 导出的图。
 - 旧版本或 `--no-meta` 导出的图没有该信息，`inspect` 会以退出码 1 + `hint` 说明。
 - `batch` 的 job 同样支持 `"meta": false`。
 
@@ -205,6 +205,6 @@ node cli/tb.js render forest inn --no-meta             :: 关闭内嵌（默认�
 node cli/selftest.js
 ```
 
-会跑 33 组端到端用例（发现类命令、各种渲染选项、内嵌元信息往返、配方/预设/批量、风格库增删改查、错误路径），
+会跑 34 组端到端用例（发现类命令、各种渲染选项、内嵌元信息往返（含网页写入互通）、配方/预设/批量、风格库增删改查、错误路径），
 临时风格与预设会自动清理，产物默认也在结束时清掉；想留下图片检查就加 `--keep`（留在 `cli/out/selftest/`）。
 改完 CLI 代码后跑一遍，避免回归。

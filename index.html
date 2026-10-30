@@ -222,6 +222,8 @@
 				<button class="btn small" id="btnExportCurrent">导出当前方向</button>
 				<button class="btn small" id="btnExportAll">导出全部方向 + 精灵表</button>
 				<button class="btn small ghost" id="btnExportRecipe">导出配方 JSON</button>
+				<button class="btn small ghost" id="btnImportImage" title="读取本工具导出的 PNG（内嵌生成参数），恢复当时的建筑与视角配置">导入图片配方</button>
+				<input type="file" id="importImageInput" accept=".png,image/png" hidden>
 			</div>
 
 			<div class="status" id="status">正在准备…</div>
@@ -437,6 +439,8 @@
 				<li><strong>导出当前方向</strong>：<code>dir_0.png</code>，透明或纯色背景，尺寸即画布尺寸。</li>
 				<li><strong>导出全部方向</strong>：ZIP 内含 <code>dir_0.png … dir_N.png</code>、<code>sheet.png</code>（默认横排，超过 16384 px 自动换行）与 <code>recipe.json</code>（完整配方，便于复现）。</li>
 				<li>目录名规则与插件一致：<code>p&lt;俯角&gt;_&lt;方向数&gt;d[_persp&lt;FOV&gt;fov][_auto][_s&lt;像素/米&gt;ppm][_oi&lt;内描边&gt;-oo&lt;外描边&gt;[-os&lt;轮廓描边&gt;]]</code>。</li>
+				<li><strong>图片内嵌参数（v1.1）</strong>：每张导出的 PNG 都写入工具版本与完整配方（PNG 文本块，像素不变）。用「导入图片配方」选一张本工具导出（或命令行 <code>inspect</code> 能读）的 PNG，即可恢复当时的风格、建筑、种子、参数、视角、描边与部件覆盖。</li>
+				<li>部件贴图体积大，入图时会剥离，只保留来源与 <code>crc32</code> 指纹；导入后需要重新替换这些贴图。</li>
 				<li>「下载图集模板」导出当前风格实际使用的 4×4 图集（512px，128/格），可直接交给画师重绘后再传回。</li>
 			</ul>
 

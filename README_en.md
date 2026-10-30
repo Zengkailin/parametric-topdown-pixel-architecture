@@ -57,7 +57,8 @@ Once open:
    - "② Export current direction": save a single PNG.
    - "③ Export all directions": a ZIP containing `dir_0.png … dir_N.png`, `sheet.png` (sprite sheet), and `recipe.json` (the full recipe).
    - "Download atlas template": export the current style's 4×4 atlas so an artist can repaint and re-import it.
-   - **Since v1.1 every exported PNG embeds its generation parameters** (tool version + full recipe, stored in PNG text chunks with zero pixel impact); read them back with the CLI `inspect` command (section 7).
+   - **Since v1.1 every exported PNG embeds its generation parameters** (tool version + full recipe, stored in PNG text chunks with zero pixel impact).
+   - "Import image recipe": pick any PNG exported by this tool (web or CLI) and the style, building, seeds, parameters, view, outlines and per-part overrides are restored into the UI; the CLI equivalent is `inspect` / `rec apply` (section 7).
 
 4. **Custom styles (Style Workshop)**
    - Open "Style Workshop" at the top, upload your own 4×4 atlas (or per-role image / palette), and save as a new style.
@@ -179,7 +180,7 @@ node cli/tb.js render forest inn --no-meta             :: opt out (on by default
 
 - No timestamps are embedded: identical parameters produce a **byte-identical** PNG.
 - Per-part textures are large data URLs, so they are stripped to source name, byte count and a `crc32` fingerprint; `inspect` warns about it — re-specify `--part <role>:texture=<file>` to replay exactly.
-- Web UI and CLI write the same chunk names and JSON shape, so either side can read the other's output.
+- Web UI and CLI write the same chunk names and JSON shape, so either side can read the other's output: the web UI's "Import image recipe" button is the equivalent of `inspect` + `rec apply`, and CLI `inspect` reads web exports too (their recipe chunk is stored uncompressed).
 
 ---
 
@@ -223,6 +224,7 @@ python tools/build_assets.py --addon "<plugin>\addons\hd2d_scene_tools"
 
 - **CLI**: added `cli/` (`render / batch / list / schema / rec / styles / atlas / preset`) — zero dependencies, single-process batch rendering, recipe/preset/style-pack interoperability with the web UI.
 - **Embedded image metadata**: PNGs exported by the web UI and CLI now carry tool version + full recipe in PNG text chunks (pixels untouched). New `inspect` reads it back; `rec apply <png>` / `render --recipe <png>` replay directly from an image; `--no-meta` opts out.
+- **Web image import**: a new "Import image recipe" button under the preview restores the full configuration (style / building / seeds / parameters / view / outlines / per-part overrides) from any exported PNG — the web counterpart of `inspect` / `rec apply`.
 - Summary now reports `version` / `meta`; identical parameters render byte-identical PNGs.
 
 ### v1.0

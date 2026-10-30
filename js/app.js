@@ -1438,6 +1438,20 @@ function recipeDocument() {
 			return acc;
 		}, {}),
 		outputFolder: currentFolder(),
+		// 精确回放用：完整配置对象，与 CLI 的 recipeDocument 同构
+		config: clone({
+			styleId: state.cfg.styleId,
+			categoryId: state.cfg.categoryId,
+			typeId: state.cfg.typeId,
+			look: state.cfg.look,
+			shapeSeed: state.cfg.shapeSeed,
+			detailSeed: state.cfg.detailSeed,
+			appearanceSeed: state.cfg.appearanceSeed,
+			params: state.cfg.params,
+			view: state.cfg.view,
+			render: state.cfg.render,
+			partOverrides: state.partOverrides
+		}),
 		note: "无光照渲染：颜色只来自材质图集 × 顶点染色；几何移植自 Godot addon topdown_building_studio（v5 配方）。"
 	};
 }
@@ -1447,6 +1461,60 @@ function exportRecipe() {
 	downloadBytes(new TextEncoder().encode(JSON.stringify(doc, null, 2)),
 		(currentIdentity() + "_recipe.json"), "application/json");
 	toast("配方 JSON 已导出");
+}
+
+/** 导入图片内嵌配方：把导出的 PNG 读回来，恢复当时的建筑与视角配置。 */
+async function importImageRecipe(file) {
+	try {
+		setStatus("正在读取图片内嵌参数：" + file.name);
+		var bytes = new Uint8Array(await file.arrayBuffer());
+		var meta = await TB.pngReadMeta(bytes);
+		var source = meta.doc.config;
+		if (!source) throw new Error("图片来自 v1.0（只含视角摘要，没有完整配置），请用 v1.1 重新导出");
+		var cfg = normalizeConfig(source);
+		var entry = TB.Catalog.entry(cfg.typeId);
+		if (!entry) {
+			throw new Error("图片里的建筑类型「" + cfg.typeId + "」在当前版本不存在");
+		}
+		cfg.categoryId = entry.category;
+		var warnings = [];
+		if (!getStyle(cfg.styleId)) {
+			var wantedName = (meta.doc.style && meta.doc.style.name) || cfg.styleId;
+			var geometry = meta.doc.style && meta.doc.style.geometry;
+			var fallback = state.styles.filter(function (s) { return s.geometry === geometry; })[0] || state.styles[0];
+			warnings.push("本地没有风格「" + wantedName + "」，已换成「" + fallback.name + "」");
+			cfg.styleId = fallback.id;
+		}
+		var omitted = [];
+		Object.keys(source.partOverrides || {}).forEach(function (role) {
+			var part = source.partOverrides[role];
+			if (part && part.textureOmitted) omitted.push(TB.ROLE_ZH[role] || role);
+		});
+		if (omitted.length) {
+			warnings.push(omitted.join("、") + " 的自定义贴图未内嵌（体积原因），需要重新替换");
+		}
+
+		state.cfg = cfg;
+		state.partOverrides = clone(cfg.partOverrides || {});
+		state.mesh = null;
+		state.meshKey = "";
+		fillCategories();
+		fillTypes();
+		refreshTypeTitles();
+		syncControls();
+		selectPart(null);
+		saveConfigSoon();
+		scheduleRender(0);
+
+		var dirs = [1, 2, 4, 8][Number(cfg.view.directions) || 0] || 1;
+		var summary = "已载入图片配方：" + activeStyle().name + " · " + TB.Catalog.title(cfg.typeId, cfg.styleId) +
+			" · 俯角 " + fmt(cfg.view.pitch, 0) + "° · " + dirs + " 方向（工具 v" + (meta.version || "?") + "）";
+		setStatus(summary + (warnings.length ? " · " + warnings.join("；") : ""), warnings.length ? "warn" : "ok");
+		toast(summary + (warnings.length ? "；" + warnings[0] : ""));
+	} catch (err) {
+		setStatus("载入图片配方失败：" + err.message, "err");
+		toast("载入失败：" + err.message, "err");
+	}
 }
 
 async function downloadTemplate(style, cacheKey) {
@@ -2051,6 +2119,12 @@ function bindEvents() {
 	$("#btnSaveAll").addEventListener("click", exportAll);
 	$("#btnExportAll").addEventListener("click", exportAll);
 	$("#btnExportRecipe").addEventListener("click", exportRecipe);
+	$("#btnImportImage").addEventListener("click", function () { $("#importImageInput").click(); });
+	$("#importImageInput").addEventListener("change", async function () {
+		var file = this.files && this.files[0];
+		this.value = "";
+		if (file) await importImageRecipe(file);
+	});
 	$("#btnTemplate").addEventListener("click", function () { downloadTemplate(activeStyle()); });
 
 	$("#btnReset").addEventListener("click", function () {
@@ -2254,6 +2328,7 @@ function init() {
 		render: renderPreview,
 		exportAll: exportAll,
 		exportCurrent: exportCurrent,
+		importImage: importImageRecipe,
 		openWorkshop: openWorkshop,
 		recipe: recipeDocument,
 		selectPart: selectPart,

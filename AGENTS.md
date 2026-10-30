@@ -144,6 +144,7 @@ node cli/tb.js rec show out/inn8/recipe.json      :: 看配方解析结果
 node cli/tb.js rec apply out/inn8/recipe.json -o out/again
 node cli/tb.js inspect out/inn8/dir_0.png         :: 直接读图片自带配方（v1.1）
 node cli/tb.js rec apply out/inn8/dir_0.png -o out/again
+:: 网页侧等价入口：预览下方「导入图片配方」，能读网页与 CLI 导出的 PNG
 node cli/tb.js preset save pixel --style jiangnan_pixel --no-aa --size 256
 node cli/tb.js render --preset pixel -t house -o out/px.png
 ```
@@ -179,7 +180,7 @@ cli/styles/        自定义风格（*.json，与网页 localStorage 同构）
 cli/presets/       参数预设
 cli/out/           默认产物目录（已 gitignore）
 cli/.cache/        图集解码缓存（按 js/atlases.js 的体积+mtime 自动失效）
-cli/selftest.js    端到端自测：node cli/selftest.js（33 组）
+cli/selftest.js    端到端自测：node cli/selftest.js（34 组）
 cli/README.md      完整手册（含全部选项说明，按需再读）
 ```
 

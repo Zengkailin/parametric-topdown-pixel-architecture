@@ -277,6 +277,33 @@ check("部件贴图剥离告警", function () {
 	return "textures=omitted";
 });
 
+// 网页端 js/pngmeta.js 写的是未压缩 iTXt，必须和 CLI 的读取端互通
+check("网页 pngmeta 写入 → CLI inspect 可读", function () {
+	const vm = require("vm");
+	const ctx = { console: console, Uint8Array: Uint8Array, DataView: DataView, TextEncoder: TextEncoder, TextDecoder: TextDecoder, JSON: JSON, String: String, Number: Number };
+	ctx.globalThis = ctx;
+	vm.createContext(ctx);
+	["util", "pngmeta"].forEach(function (name) {
+		vm.runInContext(fs.readFileSync(path.join(ROOT, "js", name + ".js"), "utf8"), ctx, { filename: name + ".js" });
+	});
+	const src = path.join(OUT, "web_src.png");
+	json(run(["render", "forest", "inn", "-p", "30", "--size", "256", "-o", src]));
+	const doc = json(run(["inspect", src, "--full"])).recipe;
+	const base = path.join(OUT, "web_base.png");
+	json(run(["render", "forest", "inn", "-p", "30", "--size", "256", "--no-meta", "-o", base]));
+	const out = path.join(OUT, "web_meta.png");
+	fs.writeFileSync(out, ctx.TB.pngEmbedText(new Uint8Array(fs.readFileSync(base)), ctx.TB.pngMetaEntries(doc)));
+	const info = json(run(["inspect", out]));
+	assert(info.ok, "CLI 读不了网页写的元信息");
+	assert(info.style === "forest" && info.type === "inn", "风格/类型不对：" + info.style + "/" + info.type);
+	assert(info.pitch === 30 && info.canvas[0] === 256, "视角参数不对");
+	const png = require("./lib/png");
+	const a = png.decodeFile(base);
+	const b = png.decodeFile(out);
+	assert(Buffer.compare(Buffer.from(a.data), Buffer.from(b.data)) === 0, "写入文本块后像素变了");
+	return "网页写入 · CLI 读回 · 像素不变";
+});
+
 // ---------------------------------------------------------------------------
 // 配方 / 预设 / 批量
 // ---------------------------------------------------------------------------
