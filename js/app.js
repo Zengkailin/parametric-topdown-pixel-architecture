@@ -11,7 +11,7 @@ var $$ = function (sel) { return Array.prototype.slice.call(document.querySelect
 var STORAGE_CONFIG = "tb_topdown_config_v1";
 var STORAGE_STYLES = "tb_topdown_styles_v1";
 /** 工具版本：界面标识、配方 JSON、风格包导出统一取这里。 */
-var TOOL_VERSION = "1.0";
+var TOOL_VERSION = "1.1";
 // 与插件 editor/building_styles.gd#IDS 顺序一致；像素风垫底
 var STYLE_ORDER = ["jiangnan", "forest", "desert", "machiya", "nordic", "harbor", "palace", "gothic", "steamworks", "jiangnan_pixel"];
 
@@ -1294,8 +1294,18 @@ function canvasPngBytes(canvas) {
 	});
 }
 
+function pngWithMeta(bytes) {
+	try {
+		if (!TB.pngEmbedText) return bytes;
+		return TB.pngEmbedText(bytes, TB.pngMetaEntries(recipeDocument()));
+	} catch (err) {
+		console.warn("内嵌元信息写入失败：", err);
+		return bytes;
+	}
+}
+
 async function framePngBytes(frame) {
-	return canvasPngBytes(frameToCanvas(frame));
+	return pngWithMeta(await canvasPngBytes(frameToCanvas(frame)));
 }
 
 function currentIdentity() {

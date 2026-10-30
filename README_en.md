@@ -13,6 +13,7 @@ A local web tool that renders **parametric 3D buildings** into **2D top-down pix
 | Who you are | What to install | Notes |
 |---|---|---|
 | **End user** (just want to render sprites) | **Nothing** | Double-click `index.html`. See "Quick Start" below. |
+| **AI agent / automation script** | **Node.js 18+** (no `npm install`) | Drive the same renderer via `node cli/tb.js ...`. See section 7. |
 | **Developer** (modify source / run tests / regenerate assets) | Python 3.10+ (with `Pillow`) and/or Node.js 18+ | Only needed for the scripts under `tools/`. See the "Developers" section. |
 
 > Rendering sprites **does not require** Node.js, Python, or any `npm install`. `js/atlases.js` is large (~7.6 MB) because 10 atlases are embedded inline, so the page works from `file://` without a server.
@@ -56,6 +57,7 @@ Once open:
    - "② Export current direction": save a single PNG.
    - "③ Export all directions": a ZIP containing `dir_0.png … dir_N.png`, `sheet.png` (sprite sheet), and `recipe.json` (the full recipe).
    - "Download atlas template": export the current style's 4×4 atlas so an artist can repaint and re-import it.
+   - **Since v1.1 every exported PNG embeds its generation parameters** (tool version + full recipe, stored in PNG text chunks with zero pixel impact); read them back with the CLI `inspect` command (section 7).
 
 4. **Custom styles (Style Workshop)**
    - Open "Style Workshop" at the top, upload your own 4×4 atlas (or per-role image / palette), and save as a new style.
@@ -98,7 +100,11 @@ Turn off "Anti-aliasing" and set the canvas size to match your final upscale (e.
 Geometry/parameters are identical, but the random sequence differs (PCG32 seeding details). To match Godot exactly, rebuild from this tool's exported `recipe.json`.
 
 **Can I batch-render?**
-The web UI exports all directions of the current building at once. For batch multi-building, reuse the `js/` modules in Node (see `tools/test_all_types.js`).
+The web UI exports all directions of the current building at once. For batch multi-building use the CLI:
+
+```bat
+node cli/tb.js batch jobs.json
+```
 
 ---
 
@@ -108,15 +114,76 @@ The web UI exports all directions of the current building at once. For batch mul
 参数化topdown建筑/
 ├─ index.html              Page skeleton (panels / preview / style workshop)
 ├─ 启动工具.bat            Opens index.html in the default browser
+├─ AGENTS.md               Starter guide for AI agents (read this first)
+├─ tb.cmd                  CLI shortcut (= node cli\tb.js, needs Node 18+)
 ├─ css/app.css             UI styles
 ├─ js/                     Core logic (geometry / materials / rasterizer / UI)
+├─ cli/                    CLI for AI agents / scripts (see section 7)
 ├─ samples/                Example outputs and UI screenshots
 └─ tools/                  Dev self-tests (not needed for normal use, see below)
 ```
 
 ---
 
-## 7. Developers (optional)
+## 7. CLI (for AI agents / automation)
+
+Same geometry, materials and rasterizer, exposed as a command line. **Zero dependencies** (Node 18+, no `npm install`).
+Full reference: [`cli/README.md`](cli/README.md). Short version:
+
+```bat
+:: render (defaults: 512px, pitch 45, single direction, orthographic)
+node cli/tb.js render forest inn -o out/inn.png
+
+:: 8 directions + sprite sheet + ZIP + recipe
+node cli/tb.js render jiangnan inn -d 8 --sheet --zip -o out/inn8
+
+:: let an agent discover every option and enum at once
+node cli/tb.js schema
+
+:: batch in a single process (atlases parsed once)
+node cli/tb.js batch jobs.json
+
+:: read back the parameters embedded in an image (on by default since v1.1)
+node cli/tb.js inspect out/inn.png
+
+:: use a PNG as a recipe: re-render with the parameters stored inside it
+node cli/tb.js rec apply out/inn.png -o out/again
+```
+
+Designed for agent use:
+
+- **One-line JSON summary by default** — `version / canvas / dirs / tris / ink / bbox / ms / meta / files`; `ink` and `bbox` tell you at a glance whether the frame is empty or badly cropped. `--quiet` prints paths only, `--thumb` adds a thumbnail.
+- **No source reading needed** — `list styles|types|params|roles|enums` and `schema` expose all values and ranges.
+- **Short commands** — `render forest inn -o a.png` is enough; save recurring setups with `preset save pixel` and reuse via `--preset pixel`.
+- **Reproducible** — `--recipe` accepts the web UI's `recipe.json`; since v1.1 every PNG carries its own recipe, so `inspect` reads it back and `rec apply <png>` replays it (`--save-recipe` writes a JSON the web UI can import).
+- **Full feature parity** — multi-direction, sprite sheets, three outline types, per-part tint/texture/outline, custom style pack import/export, atlas validation and templates.
+- **Fast** — decoded atlases are cached in `cli/.cache/`, one render takes ~0.4 s; `batch` reuses the same process.
+
+### Embedded image metadata (v1.1)
+
+Every exported PNG (frames, sprite sheets, thumbnails, frames inside ZIPs) carries three PNG text chunks by default. Pixel data is untouched, so any image viewer is unaffected:
+
+| Chunk | Type | Content |
+|---|---|---|
+| `Software` | tEXt | Producing tool and version |
+| `topdown:version` | tEXt | Tool version (e.g. `1.1`) |
+| `topdown:recipe` | iTXt | Full recipe JSON (UTF-8, deflate-compressed) |
+
+```bat
+node cli/tb.js inspect out/inn.png                    :: version + view/building parameters
+node cli/tb.js inspect out/inn.png --full              :: include the full recipe
+node cli/tb.js inspect out/inn.png --save-recipe a.json
+node cli/tb.js rec apply out/inn.png -o out/again      :: replay from the image
+node cli/tb.js render forest inn --no-meta             :: opt out (on by default)
+```
+
+- No timestamps are embedded: identical parameters produce a **byte-identical** PNG.
+- Per-part textures are large data URLs, so they are stripped to source name, byte count and a `crc32` fingerprint; `inspect` warns about it — re-specify `--part <role>:texture=<file>` to replay exactly.
+- Web UI and CLI write the same chunk names and JSON shape, so either side can read the other's output.
+
+---
+
+## 8. Developers (optional)
 
 End users can skip this section. These scripts are for maintaining / verifying the source and need the corresponding runtime:
 
@@ -127,6 +194,9 @@ node tools/test_nearest.js
 node tools/test_all_types.js
 node tools/test_views.js
 node tools/ui_test.js        :: needs local Chrome / Edge
+
+:: CLI end-to-end self-test (needs Node 18+)
+node cli/selftest.js
 
 :: Regenerate catalog & atlases from the Godot plugin (needs Python + Pillow)
 pip install Pillow
@@ -139,11 +209,25 @@ python tools/build_assets.py --addon "<plugin>\addons\hd2d_scene_tools"
 
 ---
 
-## 8. Open Source & License
+## 9. Open Source & License
 
 - Issues and Pull Requests are welcome. Please run the `tools/` self-tests before submitting to avoid regressions.
 - This project is a web port of the Godot plugin `hd2d_scene_tools`, referencing its geometry and parameter spec — please comply with its respective license.
 - Atlas assets may involve third-party copyright; confirm licensing before use / distribution.
+
+---
+
+## 10. Changelog
+
+### v1.1 (2026-10-30)
+
+- **CLI**: added `cli/` (`render / batch / list / schema / rec / styles / atlas / preset`) — zero dependencies, single-process batch rendering, recipe/preset/style-pack interoperability with the web UI.
+- **Embedded image metadata**: PNGs exported by the web UI and CLI now carry tool version + full recipe in PNG text chunks (pixels untouched). New `inspect` reads it back; `rec apply <png>` / `render --recipe <png>` replay directly from an image; `--no-meta` opts out.
+- Summary now reports `version` / `meta`; identical parameters render byte-identical PNGs.
+
+### v1.0
+
+- First web release: 10 styles, 46 building types, orthographic/perspective, multi-direction and sprite-sheet export, style workshop and per-part overrides.
 
 ---
 
