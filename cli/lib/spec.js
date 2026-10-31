@@ -133,12 +133,25 @@ const RENDER_HELP = `render —— 把一个建筑渲染成 2D 俯视像素图
       --dry-run         只解析配置并回显，不渲染（校验参数最省时间）
       --no-meta         不写内嵌元信息（默认写入：版本 + 完整配方，可用 inspect 回读）
 
+Godot 预制体（可选；普通 PNG 输出不变）
+      --godot-prefab <path>    额外输出 .tscn（本地路径或 res://，后者需 --godot-project）
+      --godot-texture <path>   写进 tscn 的贴图 res:// 路径；同路径落一张裁剪后的 PNG
+      --godot-project <dir>    res:// 映射到的 Godot 工程根目录
+      --godot-margin <px>      裁剪留边（默认 6）
+      --godot-name <name>      根节点名（默认取 tscn 文件名）
+    说明：节点全为内置类型（StaticBody2D + CollisionPolygon2D + Sprite2D + Area2D），
+    不挂任何脚本、不含 StippleShadow；预制体取第 1 个方向，需透明背景。
+
 示例
   node cli/tb.js render forest inn -p 30 -d 4 --sheet --out out/inn
   node cli/tb.js render jiangnan house --param floors=2 --param width=8 -o out/big.png
   node cli/tb.js render desert tower --no-aa --outline-silhouette 2 --thumb -o out/t.png
   node cli/tb.js render --recipe out/inn/recipe.json -o out/again
   node cli/tb.js render --recipe out/inn/dir_0.png -o out/again
+  node cli/tb.js render forest inn --size auto --scale fixed --ppm 64 --no-aa \\
+      --godot-project D:/YourGodotProject \\
+      --godot-texture res://prefab/village/inn.png \\
+      --godot-prefab res://prefab/village/inn.tscn -o out/inn.png
 `;
 
 const INSPECT_HELP = `inspect —— 读取 PNG 里内嵌的生成参数（v1.1 起默认写入）

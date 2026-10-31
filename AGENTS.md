@@ -79,6 +79,12 @@ node cli/tb.js inspect out/inn.png                   :: 版本 + 视角/建筑�
 node cli/tb.js inspect out/inn.png --save-recipe out/a.json
 node cli/tb.js rec apply out/inn.png -o out/again
 
+:: Godot 预制体（v1.2）：额外裁剪 PNG + 纯内置节点 .tscn（普通 PNG 不变）
+node cli/tb.js render forest inn --size auto --scale fixed --ppm 64 --no-aa ^
+  --godot-project D:/YourGodotProject ^
+  --godot-texture res://prefab/village/inn.png ^
+  --godot-prefab res://prefab/village/inn.tscn -o out/inn.png
+
 :: 批量（推荐）
 node cli/tb.js batch jobs.json
 ```
@@ -116,6 +122,7 @@ node cli/tb.js batch jobs.json
 | `--param` | `width depth floors pitch eave windows height bays roof porch balcony ornament` | 可重复；范围见 `list params <type>` |
 | `--part` | `<role>:<key>=<value>`，key ∈ `tint/texture/inner/innerColor/outer/outerColor` | role 见 `list roles`（16 个） |
 | `--no-meta` | 开关 | 关闭 PNG 内嵌元信息（默认写入工具版本 + 完整配方，`inspect` 可回读） |
+| `--godot-prefab` / `--godot-texture` / `--godot-project` / `--godot-margin` / `--godot-name` | 路径 / 数值 | 额外导出 Godot 预制体（裁剪 PNG + 纯内置节点 `.tscn`）；取第 1 方向、需透明背景，遮挡层只保留基点（地基中心）以上，`res://` 需要 `--godot-project` |
 
 输出规则：
 
@@ -176,11 +183,12 @@ node cli/tb.js render --style-file out/pack.json -t inn -o out/a.png
 cli/tb.js          命令入口（render/batch/list/schema/rec/styles/atlas/preset）
 cli/lib/           png 编解码、参数规范、配置与配方、内嵌元信息、渲染引擎、风格库
 js/pngmeta.js      网页导出的 PNG 元信息写入（块名与 CLI 一致）
+js/godot.js        Godot 预制体：相机投影、碰撞/遮挡多边形、纯内置节点 tscn（CLI 与网页共用）
 cli/styles/        自定义风格（*.json，与网页 localStorage 同构）
 cli/presets/       参数预设
 cli/out/           默认产物目录（已 gitignore）
 cli/.cache/        图集解码缓存（按 js/atlases.js 的体积+mtime 自动失效）
-cli/selftest.js    端到端自测：node cli/selftest.js（34 组）
+cli/selftest.js    端到端自测：node cli/selftest.js（37 组）
 cli/README.md      完整手册（含全部选项说明，按需再读）
 ```
 

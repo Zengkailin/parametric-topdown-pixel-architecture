@@ -16,7 +16,7 @@ const spec = require("./spec");
 const styles = require("./styles");
 const embedded = require("./embedded");
 
-const TOOL_VERSION = "1.1";
+const TOOL_VERSION = "1.2";
 const DEFAULT_CONFIG = {
 	styleId: "jiangnan",
 	categoryId: "residential",

@@ -221,15 +221,82 @@ check("render 背景色 + 负朝向", function () {
 });
 
 // ---------------------------------------------------------------------------
+// Godot 预制体
+// ---------------------------------------------------------------------------
+check("Godot 预制体导出（碰撞 / 遮挡 / 纯内置节点）", function () {
+	const dir = path.join(OUT, "godot");
+	const canvas = path.join(dir, "inn_canvas.png");
+	const data = json(run(["render", "forest", "inn", "--size", "auto", "--scale", "fixed", "--ppm", "64",
+		"--no-aa", "-o", canvas,
+		"--godot-project", dir,
+		"--godot-texture", "res://asset/village/buildings/inn.png",
+		"--godot-prefab", "res://prefab/village/inn.tscn"]));
+	assert(data.ok, "导出失败");
+	assert(data.prefab && fileExists(data.prefab), "缺少 prefab");
+	assert(data.prefabTexture && fileExists(data.prefabTexture), "缺少裁剪贴图");
+	const text = fs.readFileSync(path.join(ROOT, data.prefab), "utf8");
+	assert(text.indexOf('[node name="inn" type="StaticBody2D"]') >= 0, "根节点不是 StaticBody2D");
+	assert(text.indexOf('type="Sprite2D"') >= 0, "缺少 Sprite2D");
+	assert(text.indexOf('[node name="遮挡层" type="Area2D"') >= 0, "缺少遮挡 Area2D");
+	assert(text.indexOf("script =") < 0, "不应挂脚本");
+	assert(text.indexOf("StippleShadow") < 0, "不应含 StippleShadow");
+	const polygons = text.match(/polygon = PackedVector2Array\(/g) || [];
+	assert(polygons.length >= 2, "应至少有碰撞 + 1 个遮挡多边形");
+	const first = /polygon = PackedVector2Array\(([^)]+)\)/.exec(text)[1].split(",").map(Number);
+	assert(first.length === 8, "碰撞应为四边形");
+	const width = Math.abs(first[2] - first[0]);
+	const height = Math.abs(first[5] - first[1]);
+	assert(Math.abs(width - 7.49 * 64) < 2, "碰撞宽度不对：" + width);
+	assert(Math.abs(height - 6.49 * 64 * Math.SQRT1_2) < 2, "碰撞进深投影不对：" + height);
+	const png = require("./lib/png");
+	const crop = png.decodeFile(path.join(ROOT, data.prefabTexture));
+	const full = png.decodeFile(canvas);
+	assert(crop.width < full.width && crop.height < full.height, "预制体贴图应被裁剪");
+	assert(data.prefabStats && data.prefabStats.occlusionPolygons >= 1, "缺少统计");
+	const all = Array.from(text.matchAll(/polygon = PackedVector2Array\(([^)]*)\)/g)).map(function (m) {
+		return m[1].split(",").map(Number);
+	});
+	const occ = all.slice(1);
+	let maxY = -Infinity;
+	occ.forEach(function (pts) {
+		for (let i = 1; i < pts.length; i += 2) maxY = Math.max(maxY, pts[i]);
+	});
+	assert(occ.length >= 1, "缺少遮挡多边形");
+	assert(maxY <= 0.5, "遮挡层不应出现在基点以下（y>0）：" + maxY);
+	return "碰撞 " + width.toFixed(1) + "×" + height.toFixed(1) + " · 遮挡 " + data.prefabStats.occlusionPolygons + " 块";
+});
+
+check("Godot 预制体多方向（取第 1 方向）", function () {
+	const dir = path.join(OUT, "godot_multi");
+	const data = json(run(["render", "forest", "inn", "-d", "2", "--size", "256", "--no-aa",
+		"-o", path.join(dir, "multi"),
+		"--godot-project", dir,
+		"--godot-texture", "res://tex/inn.png",
+		"--godot-prefab", "res://prefab/inn.tscn"]));
+	assert(data.ok, "多方向导出失败");
+	assert(data.dirs === 2 && data.files.length === 2, "普通 PNG 应保持 2 个方向");
+	assert(data.prefab && fileExists(data.prefab), "缺少 prefab");
+	assert(fileExists(data.prefabTexture), "缺少裁剪贴图");
+	return "2 方向 · 预制体取第 1 方向";
+});
+
+check("Godot 预制体拒绝纯色背景", function () {
+	const bg = run(["render", "forest", "inn", "--bg", "202020", "-o", path.join(OUT, "godot_bad.png"),
+		"--godot-texture", "res://x.png", "--godot-prefab", path.join(OUT, "godot_bad.tscn")]);
+	assert(bg.code === 1, "纯色背景应失败");
+	return "拒绝纯色背景";
+});
+
+// ---------------------------------------------------------------------------
 // 内嵌元信息（v1.1）
 // ---------------------------------------------------------------------------
 check("PNG 内嵌元信息 → inspect 回读", function () {
 	const dir = path.join(OUT, "meta");
 	const rendered = json(run(["render", "forest", "inn", "-p", "30", "-d", "2", "--sheet", "-o", dir]));
-	assert(rendered.meta && rendered.meta.version === "1.1", "摘要应回报内嵌元信息：" + JSON.stringify(rendered.meta));
+	assert(rendered.meta && rendered.meta.version === "1.2", "摘要应回报内嵌元信息：" + JSON.stringify(rendered.meta));
 	const info = json(run(["inspect", path.join(dir, "dir_0.png")]));
 	assert(info.ok, "inspect 失败");
-	assert(info.toolVersion === "1.1", "版本号不对：" + info.toolVersion);
+	assert(info.toolVersion === "1.2", "版本号不对：" + info.toolVersion);
 	assert(info.style === "forest" && info.type === "inn", "风格/类型不对");
 	assert(info.pitch === 30 && info.dirs === 2, "视角参数没回读出来");
 	assert(info.canvas[0] === 512 && info.canvas[1] === 512, "画布不对");

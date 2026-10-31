@@ -158,6 +158,7 @@ node cli/tb.js rec apply out/inn.png -o out/again
 - **少打字**：`render forest inn -o a.png` 就够；常用组合可 `preset save pixel` 后只写 `--preset pixel`。
 - **可复现**：`--recipe` 吃网页导出的 `recipe.json`；v1.1 起每张 PNG 自带配方，`inspect` 回读、`rec apply <png>` 直接重画（`--save-recipe` 写出的配方也能拖回网页）。
 - **全功能对齐**：多方向 / 精灵表 / 三套描边 / 部件级染色换图 / 自定义风格包导入导出 / 图集校验与模板，命令行都能做。
+- **Godot 预制体**：`--godot-prefab` + `--godot-texture` 额外输出纯内置节点的 `.tscn`（碰撞层 = 地基投影，遮挡层 = 每块外轮廓），普通 PNG 输出不变（详见下文）。
 - **快**：图集解码结果缓存在 `cli/.cache/`，单次渲染约 0.4s；`batch` 复用同一进程。
 
 ### 图片内嵌元信息（v1.1）
@@ -181,6 +182,42 @@ node cli/tb.js render forest inn --no-meta             :: 不要内嵌（默认�
 - 内嵌数据不含时间戳：同一组参数渲染出的 PNG **逐字节相同**。
 - 部件贴图是数据量大的 dataURL，入图时剥离，只保留来源文件名、字节数与 `crc32` 指纹；`inspect` 会给出提示，复现时重新指定 `--part <角色>:texture=<文件>` 即可。
 - 网页版与命令行版写的是同一套块名和结构，互相都能读：网页预览下方的「导入图片配方」等价于 `inspect` + `rec apply`，命令行 `inspect` 也能读网页导出的图（网页写的配方未压缩，CLI 一样解析）。
+
+### Godot 预制体导出（v1.2）
+
+普通 PNG 输出链路完全不变；需要时额外导出可直接放进 Godot 工程的预制体：
+
+```bat
+node cli/tb.js render forest inn --size auto --scale fixed --ppm 64 --no-aa ^
+  --godot-project D:/YourGodotProject ^
+  --godot-texture res://prefab/village/inn.png ^
+  --godot-prefab  res://prefab/village/inn.tscn ^
+  -o out/inn.png
+```
+
+产物：
+
+- `out/inn.png`：原来的整张画布 PNG（不受影响）。
+- `res://prefab/village/inn.png`：**预制体专用**的裁剪 PNG（不透明边界 + `--godot-margin`，默认 6px）。
+- `res://prefab/village/inn.tscn`：纯内置节点预制体。
+
+> 碰撞/遮挡多边形是按这张**裁剪 PNG** 的尺寸与原点计算的，`.tscn` 里的 `ext_resource` 必须指向同一张图；换成旧图（尺寸/裁切不同）会整体错位。建议给裁剪图单独留路径（例如 `res://prefab/architecture/inn.png`），不要指向旧的村庄贴图。网页端导出的 ZIP 已按你填写的 `res://` 目录结构打包，直接解压到工程根目录即可。
+
+节点结构与口径：
+
+```
+StaticBody2D (collision_layer=1, collision_mask=0)
+├─ CollisionPolygon2D   ← 地基台基（w+0.24 × d+0.24）按当前相机投影后的四边形
+├─ Sprite2D             ← offset 让世界原点（地基中心）落在节点原点
+└─ 遮挡层 (Area2D)
+   └─ CollisionPolygon2D × N ← 不透明覆盖填掉内部镂空、扣除碰撞区，只保留基点（地基中心）以上，每块连通区域的外轮廓
+```
+
+- 不挂任何脚本，不含 `StippleShadow`；碰撞/遮挡都交给项目现有的 `scene_object.gd` 或你自己的节点去接。
+- 俯角 45° 时，进深在 2D 平面上会被压缩为 `d×sin45°`，与导出的精灵底座严格对齐；随机朝向 / 透视同样支持。
+- 预制体取第 1 个方向（网页端为当前预览方向）；需透明背景；俯角过低导致地基投影退化为线时会直接报错。
+- 网页端：预览下方「导出 Godot 预制体」按钮，导出 ZIP（裁剪 PNG + `.tscn`），填写贴图 `res://` 路径即可。
+- 说明：Godot 的 `CollisionPolygon2D` 不支持孔洞。若某块地基被不透明像素完全包围，遮挡层会按「外轮廓」规则把该区域一并覆盖；该区域本身被碰撞挡住，实际不可达。
 
 ---
 
@@ -219,6 +256,13 @@ python tools/build_assets.py --addon "<插件>\addons\hd2d_scene_tools"
 ---
 
 ## 十、更新日志
+
+### v1.2（2026-10-31）
+
+- **Godot 预制体导出**：`render` 新增 `--godot-prefab / --godot-texture / --godot-project / --godot-margin / --godot-name`，用同一视角的 3D 网格与相机变换算出「地基投影碰撞层」和「不透明覆盖扣除碰撞区、只保留基点（地基中心）以上」的每块外轮廓，生成纯内置节点的 `.tscn`（StaticBody2D + CollisionPolygon2D + Sprite2D + Area2D），不含脚本与 StippleShadow；额外落一张裁剪 PNG，普通 PNG 输出链路不变。预制体取第 1 个方向（网页端为当前预览方向）。
+- **网页端**：预览下方新增「导出 Godot 预制体」，ZIP 按填写的 `res://` 目录结构打包（裁剪 PNG + `.tscn`）。
+- 几何层新增 `mesh.footprint`（地基台基尺寸），供碰撞层计算；不影响任何渲染结果。
+- 版本号升至 1.2。
 
 ### v1.1（2026-10-30）
 

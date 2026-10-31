@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Topdown 建筑工坊 · 网页版 v1.1</title>
+<title>Topdown 建筑工坊 · 网页版 v1.2</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231d222a'/%3E%3Cpath d='M6 15 16 7l10 8v10H6z' fill='%23d3a94e'/%3E%3Cpath d='M12 25v-6h8v6z' fill='%23373a34'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="css/app.css">
 </head>
@@ -11,7 +11,7 @@
 <div class="app">
 	<header class="topbar">
 		<div class="brand">
-			<h1>Topdown 建筑工坊 · 网页版 <span class="ver" id="appVersion">v1.1</span></h1>
+			<h1>Topdown 建筑工坊 · 网页版 <span class="ver" id="appVersion">v1.2</span></h1>
 			<small>参数化建筑 → 俯视像素图 · 复刻 Jeff Studio 插件 · 不依赖 Godot、不计算光照</small>
 		</div>
 		<span class="badge" id="styleBadge">江南古镇</span>
@@ -176,7 +176,7 @@
 							<input type="number" data-scope="render" data-key="depthThreshold" min="0.01" max="1" step="0.01" value="0.15"></div>
 						<div class="row"><span class="label">法线断层阈值</span>
 							<input type="number" data-scope="render" data-key="normalThreshold" min="0.01" max="1" step="0.01" value="0.3"></div>
-						<p class="note">内描边只画在该部件自己的像素上（轮廓、折面断层、部件分界，向内部加粗）；部件外描边把每个部件的剪影向外扩，允许压到别的部件上，重叠处「距离更近者赢，同距靠前者赢」；轮廓描边只把整栋建筑的剪影外扩到背景上。三者宽度与颜色独立，0 为关闭。</p>
+						<p class="note">内描边只画在该部件自己的像素上（轮廓、折面断层、部件分界，向内部加粗）；部件交界处只由一侧拥有（更靠前/指定侧），不会两边各画一条合成 2px 粗缝。部件外描边把每个部件的剪影向外扩，允许压到别的部件上，但只允许“前侧压后侧”；重叠处覆盖率更高者赢，其次更近，再次更靠前。轮廓描边只把整栋建筑的剪影外扩到背景上。三者宽度都按输出像素连续计算：关抗锯齿时 0.5 是 50% 混色/半透明的 1px 线、1 才是实色 1px；0 为关闭。</p>
 					</details>
 					<p class="note">正交投影没有消失点；透视投影会随 FOV 产生消失点。FOV 0° 是透视的极限——相机距离趋于无穷，等价于正交投影，工具会自动按正交出图并标注「正交极限」。<br>俯角只改变看见立面与屋顶的比例：90° 即纯顶视，0° 为平视（纯立面）。<br>自适应画布会按像素密度与建筑投影范围自动计算宽高；固定像素密度则 1 米 = 指定像素。</p>
 				</div>
@@ -221,6 +221,7 @@
 				<span class="spacer"></span>
 				<button class="btn small" id="btnExportCurrent">导出当前方向</button>
 				<button class="btn small" id="btnExportAll">导出全部方向 + 精灵表</button>
+				<button class="btn small ghost" id="btnExportGodot" title="额外导出纯内置节点的 Godot 预制体（裁剪 PNG + .tscn）">导出 Godot 预制体</button>
 				<button class="btn small ghost" id="btnExportRecipe">导出配方 JSON</button>
 				<button class="btn small ghost" id="btnImportImage" title="读取本工具导出的 PNG（内嵌生成参数），恢复当时的建筑与视角配置">导入图片配方</button>
 				<input type="file" id="importImageInput" accept=".png,image/png" hidden>
@@ -325,6 +326,52 @@
 			<span class="note" style="margin:0" id="texFoot">取各风格该角色的原始贴图（不含外观染色与微差）；只换当前建筑的这一个部件，不改动任何风格。</span>
 			<span class="spacer"></span>
 			<button class="btn small ghost" id="btnTextureClear" hidden>改用风格原纹理</button>
+		</div>
+	</div>
+</div>
+
+<!-- ===================== 导出 Godot 预制体 ===================== -->
+<div class="modal" id="godotModal">
+	<div class="dialog narrow">
+		<div class="dialog-head">
+			<h2>导出 Godot 预制体</h2>
+			<span class="badge">纯内置节点</span>
+			<span class="spacer"></span>
+			<button class="btn small ghost" id="btnCloseGodot">关闭</button>
+		</div>
+		<div class="dialog-body single">
+			<p class="note" style="margin:0 0 12px">
+				导出 ZIP：一张裁到不透明边界（+留边）的 PNG，以及引用它的 .tscn。
+				节点结构为 StaticBody2D + CollisionPolygon2D + Sprite2D + 遮挡层 Area2D，不含任何脚本与 StippleShadow。
+			</p>
+			<div class="field">
+				<label for="godotTexturePath">贴图路径（res://，裁剪 PNG 会放到这里）</label>
+				<input type="text" id="godotTexturePath" placeholder="res://prefab/architecture/inn.png">
+			</div>
+			<div class="field" style="margin-top:10px">
+				<label for="godotPrefabPath">预制体路径（res://）</label>
+				<input type="text" id="godotPrefabPath" placeholder="res://prefab/architecture/inn.tscn">
+			</div>
+			<div class="grid2" style="margin-top:10px">
+				<div class="field">
+					<label for="godotNodeName">根节点名</label>
+					<input type="text" id="godotNodeName" placeholder="inn">
+				</div>
+				<div class="field">
+					<label for="godotMargin">裁剪留边（像素）</label>
+					<input type="number" id="godotMargin" value="6" min="0" max="32" step="1">
+				</div>
+			</div>
+			<p class="note" style="margin:12px 0 0">
+				碰撞层 = 地基投影；遮挡层 = 不透明覆盖扣除碰撞区后、基点（地基中心）以上每块的外轮廓。<br>
+				只导出当前预览方向；纯色背景会拒绝导出。ZIP 按 res:// 目录结构打包，解压到工程根目录即可。
+			</p>
+		</div>
+		<div class="dialog-foot">
+			<span class="note" style="margin:0" id="godotFoot">ZIP 内路径与上面的 res:// 一一对应；.tscn 内的贴图路径可随时在 Godot 里改。</span>
+			<span class="spacer"></span>
+			<button class="btn ghost" id="btnCancelGodot">取消</button>
+			<button class="btn primary" id="btnDoExportGodot">导出 ZIP</button>
 		</div>
 	</div>
 </div>
@@ -438,6 +485,7 @@
 			<ul>
 				<li><strong>导出当前方向</strong>：<code>dir_0.png</code>，透明或纯色背景，尺寸即画布尺寸。</li>
 				<li><strong>导出全部方向</strong>：ZIP 内含 <code>dir_0.png … dir_N.png</code>、<code>sheet.png</code>（默认横排，超过 16384 px 自动换行）与 <code>recipe.json</code>（完整配方，便于复现）。</li>
+				<li><strong>导出 Godot 预制体</strong>：ZIP 内含裁剪后的 PNG 与纯内置节点 <code>.tscn</code>（StaticBody2D + CollisionPolygon2D + Sprite2D + 遮挡层 Area2D），按你填写的 <code>res://</code> 目录结构打包。碰撞层取地基在当前视角下的投影；遮挡层取不透明覆盖扣除碰撞区后、基点（地基中心）以上每块的外轮廓；不含脚本与 StippleShadow。预制体对应当前预览方向。</li>
 				<li>目录名规则与插件一致：<code>p&lt;俯角&gt;_&lt;方向数&gt;d[_persp&lt;FOV&gt;fov][_auto][_s&lt;像素/米&gt;ppm][_oi&lt;内描边&gt;-oo&lt;外描边&gt;[-os&lt;轮廓描边&gt;]]</code>。</li>
 				<li><strong>图片内嵌参数（v1.1）</strong>：每张导出的 PNG 都写入工具版本与完整配方（PNG 文本块，像素不变）。用「导入图片配方」选一张本工具导出（或命令行 <code>inspect</code> 能读）的 PNG，即可恢复当时的风格、建筑、种子、参数、视角、描边与部件覆盖。</li>
 				<li>部件贴图体积大，入图时会剥离，只保留来源与 <code>crc32</code> 指纹；导入后需要重新替换这些贴图。</li>
@@ -464,6 +512,7 @@
 <script src="js/geometry.js"></script>
 <script src="js/view.js"></script>
 <script src="js/renderer.js"></script>
+<script src="js/godot.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

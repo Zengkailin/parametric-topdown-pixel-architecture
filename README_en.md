@@ -182,6 +182,40 @@ node cli/tb.js render forest inn --no-meta             :: opt out (on by default
 - Per-part textures are large data URLs, so they are stripped to source name, byte count and a `crc32` fingerprint; `inspect` warns about it — re-specify `--part <role>:texture=<file>` to replay exactly.
 - Web UI and CLI write the same chunk names and JSON shape, so either side can read the other's output: the web UI's "Import image recipe" button is the equivalent of `inspect` + `rec apply`, and CLI `inspect` reads web exports too (their recipe chunk is stored uncompressed).
 
+### Godot prefab export (v1.2)
+
+The normal PNG pipeline is unchanged. Optionally emit a prefab that drops straight into a Godot project:
+
+```bat
+node cli/tb.js render forest inn --size auto --scale fixed --ppm 64 --no-aa ^
+  --godot-project D:/YourGodotProject ^
+  --godot-texture res://prefab/inn.png ^
+  --godot-prefab  res://prefab/inn.tscn ^
+  -o out/inn.png
+```
+
+Outputs:
+
+- `out/inn.png`: the original full-canvas PNG (unchanged).
+- `res://prefab/inn.png`: a **prefab-only** cropped copy (opaque bbox + `--godot-margin`, default 6 px).
+- `res://prefab/inn.tscn`: the prefab, built from built-in nodes only.
+
+> The collision/occlusion polygons are computed for that **cropped PNG's** size and origin, so the `.tscn` `ext_resource` must point at the same image; using the old asset (different crop/size) shifts everything. The web ZIP is packaged with the exact `res://` folder structure, so unzip it at the project root.
+
+```
+StaticBody2D (collision_layer=1, collision_mask=0)
+├─ CollisionPolygon2D   ← foundation footprint (w+0.24 × d+0.24) projected through the current camera
+├─ Sprite2D             ← offset puts the world origin (foundation center) at the node origin
+└─ 遮挡层 (Area2D)
+   └─ CollisionPolygon2D × N ← per-connected-block outer contours of the opaque coverage, minus the collision band, kept only above the base point (foundation center)
+```
+
+- No scripts and no `StippleShadow`; wire the collision/occlusion to your own script or the game's `scene_object.gd`.
+- At 45° pitch the depth is foreshortened by `sin(45°)` in the 2D plane, matching the sprite base exactly; arbitrary yaw and perspective are supported.
+- The prefab uses direction 1 (the current preview direction in the web UI); transparent background required; a degenerate footprint (pitch too low) raises a clear error.
+- Web UI: the "Export Godot prefab" button downloads a ZIP with the cropped PNG and the `.tscn`.
+- Note: Godot's `CollisionPolygon2D` has no holes. If a foundation band is fully enclosed by opaque pixels, the outer-contour rule keeps it in the occlusion area; that band is blocked by collision anyway and is unreachable.
+
 ---
 
 ## 8. Developers (optional)
@@ -219,6 +253,13 @@ python tools/build_assets.py --addon "<plugin>\addons\hd2d_scene_tools"
 ---
 
 ## 10. Changelog
+
+### v1.2 (2026-10-31)
+
+- **Godot prefab export**: `render` gains `--godot-prefab / --godot-texture / --godot-project / --godot-margin / --godot-name`. It uses the same 3D mesh and camera transform to derive a projected foundation collision polygon and per-block outer contours of the opaque coverage minus the collision band, kept only above the base point (foundation center), then writes a built-in-nodes-only `.tscn` (StaticBody2D + CollisionPolygon2D + Sprite2D + Area2D) with no scripts or StippleShadow. A cropped PNG is emitted alongside; the normal PNG pipeline is unchanged. The prefab uses direction 1 (the current preview direction in the web UI).
+- **Web UI**: new "Export Godot prefab" button; the ZIP mirrors the entered `res://` folder structure (cropped PNG + `.tscn`).
+- Geometry layer exposes `mesh.footprint` (foundation slab size) for the collision layer; rendering output is unaffected.
+- Version bumped to 1.2.
 
 ### v1.1 (2026-10-30)
 

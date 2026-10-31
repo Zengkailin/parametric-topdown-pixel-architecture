@@ -11,7 +11,7 @@ var $$ = function (sel) { return Array.prototype.slice.call(document.querySelect
 var STORAGE_CONFIG = "tb_topdown_config_v1";
 var STORAGE_STYLES = "tb_topdown_styles_v1";
 /** 工具版本：界面标识、配方 JSON、风格包导出统一取这里。 */
-var TOOL_VERSION = "1.1";
+var TOOL_VERSION = "1.2";
 // 与插件 editor/building_styles.gd#IDS 顺序一致；像素风垫底
 var STYLE_ORDER = ["jiangnan", "forest", "desert", "machiya", "nordic", "harbor", "palace", "gothic", "steamworks", "jiangnan_pixel"];
 
@@ -1380,6 +1380,62 @@ async function exportAll() {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Godot 预制体
+// ---------------------------------------------------------------------------
+function openGodot() {
+	var typeId = state.cfg.typeId || "building";
+	$("#godotTexturePath").value = "res://prefab/architecture/" + typeId + ".png";
+	$("#godotPrefabPath").value = "res://prefab/architecture/" + typeId + ".tscn";
+	$("#godotNodeName").value = typeId;
+	$("#godotMargin").value = "6";
+	$("#godotModal").classList.add("open");
+}
+
+function closeGodot() {
+	$("#godotModal").classList.remove("open");
+}
+
+async function exportGodot() {
+	if (state.exporting) return;
+	try {
+		state.exporting = true;
+		setStatus("正在准备 Godot 预制体…");
+		await ensurePreview();
+		var view = state.view;
+		if (Number(state.cfg.render.background) !== 0) throw new Error("Godot 预制体需要透明背景：请关闭纯色背景");
+		var texturePath = $("#godotTexturePath").value.trim();
+		var prefabPath = $("#godotPrefabPath").value.trim();
+		if (!/^res:\/\//i.test(texturePath)) throw new Error("贴图路径必须是 res://... 形式");
+		if (!/^res:\/\//i.test(prefabPath)) throw new Error("预制体路径必须是 res://... 形式");
+		var name = $("#godotNodeName").value.trim() || state.cfg.typeId;
+		var margin = Math.max(0, Math.round(Number($("#godotMargin").value) || 0));
+		var built = TB.GodotPrefab.build({
+			mesh: state.mesh, view: view, yaw: view.yaws[0], frame: state.frame,
+			texturePath: texturePath, name: name, margin: margin, transparent: true
+		});
+		var canvas = frameToCanvas({ width: built.image.width, height: built.image.height, data: built.image.data });
+		var pngBytes = pngWithMeta(await canvasPngBytes(canvas));
+		var textureEntry = texturePath.replace(/^res:\/\//i, "");
+		var prefabEntry = prefabPath.replace(/^res:\/\//i, "");
+		if (!textureEntry || !prefabEntry) throw new Error("res:// 路径不能只写协议头");
+		var archive = TB.zip([
+			{ name: textureEntry, data: pngBytes },
+			{ name: prefabEntry, data: new TextEncoder().encode(built.text) }
+		]);
+		downloadBytes(archive, name + "_godot.zip", "application/zip");
+		closeGodot();
+		var note = built.stats.clipped ? "（注意：不透明像素触及画布边缘，多边形可能不完整）" : "";
+		setStatus("已导出 Godot 预制体：" + prefabEntry + "（含 " + textureEntry + "，" + built.stats.occlusionPolygons + " 个遮挡多边形）" + note, built.stats.clipped ? "err" : "ok");
+	} catch (err) {
+		console.error(err);
+		setStatus("导出 Godot 预制体失败：" + err.message, "err");
+		toast(err.message, "err");
+	} finally {
+		state.exporting = false;
+	}
+}
+
 function recipeDocument() {
 	var style = activeStyle();
 	var view = state.view;
@@ -2119,6 +2175,13 @@ function bindEvents() {
 	$("#btnSaveAll").addEventListener("click", exportAll);
 	$("#btnExportAll").addEventListener("click", exportAll);
 	$("#btnExportRecipe").addEventListener("click", exportRecipe);
+	$("#btnExportGodot").addEventListener("click", openGodot);
+	$("#btnCloseGodot").addEventListener("click", closeGodot);
+	$("#btnCancelGodot").addEventListener("click", closeGodot);
+	$("#btnDoExportGodot").addEventListener("click", exportGodot);
+	$("#godotModal").addEventListener("mousedown", function (e) {
+		if (e.target === this) closeGodot();
+	});
 	$("#btnImportImage").addEventListener("click", function () { $("#importImageInput").click(); });
 	$("#importImageInput").addEventListener("change", async function () {
 		var file = this.files && this.files[0];
@@ -2163,6 +2226,7 @@ function bindEvents() {
 	document.addEventListener("keydown", function (e) {
 		if (e.key !== "Escape") return;
 		if ($("#textureModal").classList.contains("open")) closeTextureLibrary();
+		else if ($("#godotModal").classList.contains("open")) closeGodot();
 		else if ($("#helpModal").classList.contains("open")) $("#helpModal").classList.remove("open");
 		else if ($("#workshopModal").classList.contains("open")) closeWorkshop();
 	});

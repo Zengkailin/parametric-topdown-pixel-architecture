@@ -346,23 +346,33 @@ TB.renderFrame = function (mesh, tiles, view, yaw, opts) {
 					var norm0 = index * 3;
 					var n0x = nbuf[norm0], n0y = nbuf[norm0 + 1], n0z = nbuf[norm0 + 2];
 					var selfRole = pick[index];
-					var edge = false;
-					for (var k = 0; k < 4 && !edge; k++) {
+					var paint = false;
+					for (var k = 0; k < 4 && !paint; k++) {
 						var nx2 = ix + (k === 0 ? -1 : k === 1 ? 1 : 0);
 						var ny2 = iy + (k === 2 ? -1 : k === 3 ? 1 : 0);
 						if (nx2 < 0 || nx2 >= W || ny2 < 0 || ny2 >= H) continue;
 						var index2 = ny2 * W + nx2;
-						if (!geometry[index2]) { edge = true; break; }
-						// 部件之间的分界也算结构线
-						if (pick[index2] !== selfRole) { edge = true; break; }
+						// 剪影边界只有几何这一侧，直接归当前像素
+						if (!geometry[index2]) { paint = true; break; }
 						var other = (depth[index2] - dNear) / dRange;
 						var edgeDepth = Math.abs(self - other) / Math.max(self, 0.25);
-						if (edgeDepth > depthThreshold) { edge = true; break; }
 						var n1i = index2 * 3;
 						var dot = n0x * nbuf[n1i] + n0y * nbuf[n1i + 1] + n0z * nbuf[n1i + 2];
-						if (1 - dot > normalThreshold) { edge = true; break; }
+						var isRole = pick[index2] !== selfRole;
+						var isDepth = edgeDepth > depthThreshold;
+						var isNormal = 1 - dot > normalThreshold;
+						if (!isRole && !isDepth && !isNormal) continue;
+						// 边界只归一侧：更靠前的像素拥有；深度相同则按部件角色/屏幕位置定一侧。
+						// 这样两个部件交界处不会各画 1px 合成 2px 的粗线。
+						if (depth[index] < depth[index2] - 1e-9) { paint = true; break; }
+						if (depth[index] > depth[index2] + 1e-9) continue;
+						if (isRole) {
+							if (selfRole < pick[index2]) { paint = true; break; }
+							continue;
+						}
+						if (iy > ny2 || (iy === ny2 && ix > nx2)) { paint = true; break; }
 					}
-					if (edge) innerDist[index] = 0;
+					if (paint) innerDist[index] = 0;
 				}
 			}
 			// 倒角距离只在“同一部件”的像素之间传播，内描边因此永远留在该部件内部
@@ -422,11 +432,20 @@ TB.renderFrame = function (mesh, tiles, view, yaw, opts) {
 				if (!(mRole < roleCount)) continue;
 				var mWidth = roleInner[mRole];
 				if (mWidth <= 0) continue;
-				// 宽度是输出像素，超采样时按倍数换算；distance < 宽度 才涂（0 只有贴边像素）
-				if (innerDist[mi] >= Math.max(1, Math.round(mWidth * ss))) continue;
+				// 宽度按输出像素连续换算：整数部分实涂，最外一圈按小数覆盖率与原色混合。
+				// 这样关抗锯齿时 0.5 是一条 50% 混色的 1px 细线，而不是和 1 一样实涂。
+				var limit = mWidth * ss;
+				var mDist = innerDist[mi];
+				if (mDist >= limit) continue;
+				var fullRing = Math.floor(limit + 1e-9);
+				var coverage = mDist >= fullRing ? limit - fullRing : 1;
+				if (coverage <= 0) continue;
 				var mCol = roleInnerColor[mRole];
 				var mo = mi * 4;
-				color[mo] = mCol[0]; color[mo + 1] = mCol[1]; color[mo + 2] = mCol[2]; color[mo + 3] = 255;
+				color[mo] = Math.round(color[mo] + (mCol[0] - color[mo]) * coverage);
+				color[mo + 1] = Math.round(color[mo + 1] + (mCol[1] - color[mo + 1]) * coverage);
+				color[mo + 2] = Math.round(color[mo + 2] + (mCol[2] - color[mo + 2]) * coverage);
+				color[mo + 3] = 255;
 			}
 		}
 
@@ -436,6 +455,7 @@ TB.renderFrame = function (mesh, tiles, view, yaw, opts) {
 		if (anyPartOuter) {
 			var bestDist = new Float32Array(W * H);
 			bestDist.fill(1e6);
+			var bestCov = new Float32Array(W * H);
 			var bestRole = new Int16Array(W * H);
 			bestRole.fill(-1);
 			var distBuf = new Float32Array(W * H);
@@ -458,8 +478,9 @@ TB.renderFrame = function (mesh, tiles, view, yaw, opts) {
 			}
 			for (var pr = 0; pr < roleCount; pr++) {
 				if (!bHas[pr] || roleOuter[pr] <= 0) continue;
-				var pWidth = Math.max(1, Math.round(roleOuter[pr] * ss));
-				var pLimit = pWidth * 1.45 + 0.01;
+				// 宽度按输出像素连续计算：像素中心距部件边界越近，覆盖率越高。
+				var pWidth = roleOuter[pr] * ss;
+				var pLimit = pWidth + 1;
 				var pPad = Math.ceil(pLimit) + 1;
 				var cx0 = Math.max(0, bMinX[pr] - pPad), cx1 = Math.min(W - 1, bMaxX[pr] + pPad);
 				var cy0 = Math.max(0, bMinY[pr] - pPad), cy1 = Math.min(H - 1, bMaxY[pr] + pPad);
@@ -499,19 +520,34 @@ TB.renderFrame = function (mesh, tiles, view, yaw, opts) {
 						distBuf[ui] = ud;
 					}
 				}
-				// 竞标：距离更近者赢；距离相同则由“更靠前（深度更近）的部件”赢
+				// 竞标：覆盖率更高者赢；同覆盖率更近者赢；再同则更靠前的部件赢。
+				// 压到别的部件时只允许“前侧压后侧”：后侧部件不会把自己的外描边
+				// 反压到前面的部件上，避免交界处两边各扩 1px 合成 2px 粗缝。
 				for (var vy = cy0; vy <= cy1; vy++) {
 					for (var vx = cx0; vx <= cx1; vx++) {
 						var vi = vy * W + vx;
 						var vd = distBuf[vi];
-						if (vd > pLimit) continue;
+						var cov = pWidth - (vd - 1);
+						if (cov <= 0) continue;
+						if (cov > 1) cov = 1;
 						// 自己的像素不画自己的外描边（那是内描边的事）
 						if (geometry[vi] && pick[vi] === pr) continue;
-						if (vd < bestDist[vi] - 1e-6) {
+						if (geometry[vi]) {
+							var targetRole = pick[vi];
+							if (roleDepth[pr] > depth[vi] + 1e-9) continue;
+							if (Math.abs(roleDepth[pr] - depth[vi]) <= 1e-9 && pr > targetRole) continue;
+						}
+						if (cov > bestCov[vi] + 1e-6) {
+							bestCov[vi] = cov;
 							bestDist[vi] = vd;
 							bestRole[vi] = pr;
-						} else if (vd <= bestDist[vi] + 1e-6 && bestRole[vi] >= 0 && roleDepth[pr] < roleDepth[bestRole[vi]]) {
-							bestRole[vi] = pr;
+						} else if (Math.abs(cov - bestCov[vi]) <= 1e-6) {
+							if (vd < bestDist[vi] - 1e-6) {
+								bestDist[vi] = vd;
+								bestRole[vi] = pr;
+							} else if (vd <= bestDist[vi] + 1e-6 && bestRole[vi] >= 0 && roleDepth[pr] < roleDepth[bestRole[vi]]) {
+								bestRole[vi] = pr;
+							}
 						}
 					}
 				}
@@ -519,15 +555,31 @@ TB.renderFrame = function (mesh, tiles, view, yaw, opts) {
 			for (var pi = 0; pi < W * H; pi++) {
 				var winRole = bestRole[pi];
 				if (winRole < 0) continue;
+				var winCov = bestCov[pi];
+				if (winCov <= 0) continue;
 				var pCol = roleOuterColor[winRole];
 				var po = pi * 4;
-				color[po] = pCol[0]; color[po + 1] = pCol[1]; color[po + 2] = pCol[2]; color[po + 3] = 255;
+				if (geometry[pi]) {
+					// 压到别的部件上：保留该部件纹理，按覆盖率混入外描边颜色
+					color[po] = Math.round(color[po] + (pCol[0] - color[po]) * winCov);
+					color[po + 1] = Math.round(color[po + 1] + (pCol[1] - color[po + 1]) * winCov);
+					color[po + 2] = Math.round(color[po + 2] + (pCol[2] - color[po + 2]) * winCov);
+					color[po + 3] = 255;
+				} else if (transparent) {
+					color[po] = pCol[0]; color[po + 1] = pCol[1]; color[po + 2] = pCol[2];
+					color[po + 3] = Math.round(winCov * 255);
+				} else {
+					color[po] = Math.round(color[po] + (pCol[0] - color[po]) * winCov);
+					color[po + 1] = Math.round(color[po + 1] + (pCol[1] - color[po + 1]) * winCov);
+					color[po + 2] = Math.round(color[po + 2] + (pCol[2] - color[po + 2]) * winCov);
+					color[po + 3] = 255;
+				}
 			}
 		}
 
 		// ---- 轮廓描边：只包住整栋建筑的剪影，落在背景上 ----
 		if (silhouettePx > 0) {
-			var silSteps = Math.max(1, Math.round(silhouettePx * ss));
+			var silWidth = silhouettePx * ss;
 			var silDist = new Float32Array(W * H);
 			silDist.fill(1e6);
 			for (gi = 0; gi < W * H; gi++) if (geometry[gi]) silDist[gi] = 0;
@@ -559,11 +611,31 @@ TB.renderFrame = function (mesh, tiles, view, yaw, opts) {
 					silDist[hi] = hd;
 				}
 			}
-			var silLimit = silSteps * 1.45 + 0.01;
+			var silLimit = silWidth + 1;
 			for (var wi = 0; wi < W * H; wi++) {
-				if (geometry[wi] || silDist[wi] > silLimit) continue;
+				if (geometry[wi]) continue;
+				var sd = silDist[wi];
+				if (sd >= silLimit) continue;
+				var scov = silWidth - (sd - 1);
+				if (scov <= 0) continue;
+				if (scov > 1) scov = 1;
 				var wo = wi * 4;
-				color[wo] = silhouetteColor[0]; color[wo + 1] = silhouetteColor[1]; color[wo + 2] = silhouetteColor[2]; color[wo + 3] = 255;
+				if (transparent) {
+					// 背景可能已被部件外描边占了一部分，按 over 合成，避免叠加变黑
+					var dstA = color[wo + 3] / 255;
+					var outA = scov + dstA * (1 - scov);
+					if (outA > 0) {
+						color[wo] = Math.round((silhouetteColor[0] * scov + color[wo] * dstA * (1 - scov)) / outA);
+						color[wo + 1] = Math.round((silhouetteColor[1] * scov + color[wo + 1] * dstA * (1 - scov)) / outA);
+						color[wo + 2] = Math.round((silhouetteColor[2] * scov + color[wo + 2] * dstA * (1 - scov)) / outA);
+						color[wo + 3] = Math.round(outA * 255);
+					}
+				} else {
+					color[wo] = Math.round(color[wo] + (silhouetteColor[0] - color[wo]) * scov);
+					color[wo + 1] = Math.round(color[wo + 1] + (silhouetteColor[1] - color[wo + 1]) * scov);
+					color[wo + 2] = Math.round(color[wo + 2] + (silhouetteColor[2] - color[wo + 2]) * scov);
+					color[wo + 3] = 255;
+				}
 			}
 		}
 	}

@@ -265,4 +265,71 @@ function writeOutputs(cfg, result, opts) {
 	};
 }
 
-module.exports = { OUT_ROOT, createEngine, writeOutputs, defaultBase, ensureDir };
+// ---------------------------------------------------------------------------
+// Godot 预制体（可选，与普通 PNG 输出互不影响）
+// ---------------------------------------------------------------------------
+function resolveGodotTarget(target, projectRoot, label) {
+	const text = String(target);
+	if (/^res:\/\//i.test(text)) {
+		if (!projectRoot) throw new Error(label + " 使用 res:// 路径时需要 --godot-project 指定 Godot 工程根目录");
+		return path.join(projectRoot, text.slice(6).replace(/\//g, path.sep));
+	}
+	return path.resolve(text);
+}
+
+/**
+ * opts: { prefab, texture, project, margin, name, meta }
+ * - prefab：.tscn 输出路径（本地或 res://）
+ * - texture：写进 tscn 的贴图路径，必须是 res://；裁剪后的 PNG 会落到同一路径
+ * - project：res:// 映射到哪个 Godot 工程根目录
+ */
+function writeGodot(cfg, result, opts) {
+	const TB = env.loadCore();
+	const view = result.view;
+	if (Number(cfg.render.background) !== 0) throw new Error("Godot 预制体需要透明背景：请去掉 --bg 或使用 --bg transparent");
+
+	const prefabSpec = String(opts.prefab || "");
+	const textureSpec = String(opts.texture || "");
+	if (!prefabSpec || prefabSpec === "true") throw new Error("--godot-prefab 需要输出路径，例如 out/inn.tscn 或 res://prefab/village/inn.tscn");
+	if (!textureSpec || textureSpec === "true") throw new Error("--godot-texture 需要贴图路径，例如 res://asset/village/buildings/inn.png");
+	if (!/^res:\/\//i.test(textureSpec)) throw new Error("--godot-texture 必须是 res:// 路径（Godot 的 ext_resource 只认 res:// 或 uid://）");
+
+	const projectRoot = opts.project && String(opts.project) !== "true" ? path.resolve(String(opts.project)) : null;
+	const prefabPath = resolveGodotTarget(prefabSpec, projectRoot, "--godot-prefab");
+	const texturePath = resolveGodotTarget(textureSpec, projectRoot, "--godot-texture");
+	if (opts.normalOut && path.resolve(String(opts.normalOut)) === texturePath) {
+		throw new Error("预制体裁剪贴图会覆盖普通 PNG 输出，请给 --godot-texture 换一个路径");
+	}
+	const stem = prefabSpec.split(/[\\/]/).pop().replace(/\.tscn$/i, "") || cfg.typeId;
+	const name = opts.name && String(opts.name) !== "true" ? String(opts.name) : stem;
+	const margin = opts.margin === undefined || opts.margin === true ? 6 : Math.max(0, Math.round(Number(opts.margin) || 0));
+
+	const built = TB.GodotPrefab.build({
+		mesh: result.mesh,
+		view: view,
+		yaw: view.yaws[0],
+		frame: result.frames[0],
+		texturePath: textureSpec,
+		name: name,
+		margin: margin,
+		transparent: true
+	});
+
+	const recipe = config.recipeDocument(cfg, view, result.identity, result.style);
+	const meta = opts.meta === false ? null : embedded.forPng(recipe, config.TOOL_VERSION);
+	const text = meta ? embedded.entries(meta.doc, config.TOOL_VERSION) : null;
+	ensureDir(path.dirname(prefabPath));
+	ensureDir(path.dirname(texturePath));
+	fs.writeFileSync(texturePath, png.encode(built.image.width, built.image.height, built.image.data, text ? { text: text } : undefined));
+	fs.writeFileSync(prefabPath, built.text, "utf8");
+
+	return {
+		prefab: relPath(prefabPath),
+		texture: relPath(texturePath),
+		texturePath: textureSpec,
+		node: TB.GodotPrefab.sanitizeNodeName(name),
+		stats: built.stats
+	};
+}
+
+module.exports = { OUT_ROOT, createEngine, writeOutputs, writeGodot, defaultBase, ensureDir };

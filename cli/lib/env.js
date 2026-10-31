@@ -17,7 +17,7 @@ let atlasLoaded = false;
 
 function loadCore() {
 	if (!coreLoaded) {
-		["util", "catalog", "materials", "geometry", "view", "renderer"].forEach(function (name) {
+		["util", "catalog", "materials", "geometry", "view", "renderer", "godot"].forEach(function (name) {
 			require(path.join(JS, name + ".js"));
 		});
 		coreLoaded = true;

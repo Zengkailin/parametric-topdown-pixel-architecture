@@ -23,9 +23,15 @@ function MeshBuilder() {
 	this.xf = TB.xfIdentity();
 	this.triangles = 0;
 	this.features = {};
+	// 地基占地（米，世界 XZ）：供 Godot 预制体计算碰撞层；不含门前台阶。
+	this.footprintSize = null;
 }
 MeshBuilder.prototype.mark = function (key) {
 	this.features[key] = (this.features[key] || 0) + 1;
+};
+MeshBuilder.prototype.setFootprint = function (w, d) {
+	var fw = Number(w), fd = Number(d);
+	if (isFinite(fw) && isFinite(fd) && fw > 0 && fd > 0) this.footprintSize = [fw, fd];
 };
 MeshBuilder.prototype.bucket = function (role) {
 	var b = this.buckets[role];
@@ -169,6 +175,7 @@ MeshBuilder.prototype.finish = function () {
 		roles: roles,
 		triangles: this.triangles,
 		features: this.features,
+		footprint: this.footprintSize ? [this.footprintSize[0], this.footprintSize[1]] : null,
 		bounds: { min: min, max: max, size: V.sub(max, min), center: V.mul(V.add(min, max), 0.5) }
 	};
 };
@@ -482,6 +489,7 @@ function foundation(S, w, d, height) {
 		var size = pt(1.65, height * (i + 1) / 3, 0.29);
 		bld.box(center, size, "stone");
 	}
+	bld.setFootprint(w + 0.24, d + 0.24);
 }
 
 function panel(S, c, w, h, role, tileX) {
@@ -1485,6 +1493,8 @@ function buildArchetype4(S) {
 	var d = clampf(p.depth === undefined ? 4 : p.depth, arch === "wall" ? 0.5 : 2, 10);
 	var h = clampf(p.height === undefined ? 3.2 : p.height, 0.3, 10);
 	var bays = clampInt(p.bays === undefined ? 3 : p.bays, 1, 6);
+	// 原型建筑没有统一台基：默认占地 = 主体宽×深；若内部调用 foundation 会覆盖这里。
+	S.b.setFootprint(w, d);
 	S.variant = TB.posmod(Number(S.profile.shapeSeed), 6);
 	S.ornate = p.ornament !== false;
 	switch (arch) {

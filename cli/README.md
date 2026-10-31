@@ -122,7 +122,44 @@ node cli/tb.js batch jobs.json
 
 ---
 
-## 4. 自定义风格（与网页互通）
+## 4. Godot 预制体导出（可选，v1.2）
+
+普通 PNG 输出完全不受影响；需要时额外生成一张裁剪 PNG 和一个纯内置节点的 `.tscn`：
+
+```bat
+node cli/tb.js render forest inn --size auto --scale fixed --ppm 64 --no-aa ^
+  --godot-project D:/YourGodotProject ^
+  --godot-texture res://prefab/village/inn.png ^
+  --godot-prefab  res://prefab/village/inn.tscn ^
+  -o out/inn.png
+```
+
+| 选项 | 说明 |
+|---|---|
+| `--godot-prefab <path>` | 启用导出；`.tscn` 路径（本地或 `res://`） |
+| `--godot-texture <res://...>` | 写进 `.tscn` 的贴图路径；裁剪后的 PNG 落在同一路径 |
+| `--godot-project <dir>` | `res://` 映射到的 Godot 工程根目录（`res://` 路径必填） |
+| `--godot-margin <px>` | 裁剪留边，默认 6 |
+| `--godot-name <name>` | 根节点名，默认取 `.tscn` 文件名 |
+
+节点结构与口径：
+
+```
+StaticBody2D (collision_layer=1, collision_mask=0)
+├─ CollisionPolygon2D   ← 地基台基（w+0.24 × d+0.24）当前相机下的投影四边形
+├─ Sprite2D             ← offset 让世界原点（地基中心）落在节点原点
+└─ 遮挡层 (Area2D)
+   └─ CollisionPolygon2D × N ← 不透明覆盖（填内部镂空）扣除碰撞区、只保留基点（地基中心）以上后，每块连通区域的外轮廓
+```
+
+- 不挂脚本、不含 `StippleShadow`；俯角 45° 时进深按 `sin45°` 压缩，与精灵底座对齐。
+- 预制体取第 1 个方向；需透明背景；俯角过低导致地基投影退化时报错。
+- 摘要新增 `prefab` / `prefabTexture` / `prefabStats`；`--quiet` 也会输出这两个路径。
+- `batch` 的 job 同样支持上面 5 个键。
+
+---
+
+## 5. 自定义风格（与网页互通）
 
 ```bat
 :: 导出当前风格 4×4 图集模板（128/格），画完再导入
@@ -150,7 +187,7 @@ node cli/tb.js render --style-file out/pack.json -t inn -o out/a.png
 
 ---
 
-## 5. 目录与缓存
+## 6. 目录与缓存
 
 ```
 cli/
@@ -168,13 +205,13 @@ cli/
 
 ---
 
-## 6. 图片内嵌元信息（v1.1）
+## 7. 图片内嵌元信息（v1.1）
 
 每张导出的 PNG（单帧、精灵表、缩略图、ZIP 内的帧）默认写入三个 **PNG 文本块**。它们都是 ancillary chunk，放在 IHDR 之后，**像素数据一个字节都不改**，看图软件、游戏引擎导入都不会受影响：
 
 | 文本块 | 类型 | 内容 |
 |---|---|---|
-| `Software` | tEXt | `topdown-building-studio-cli 1.1` |
+| `Software` | tEXt | `topdown-building-studio-cli 1.2` |
 | `topdown:version` | tEXt | 工具版本号 |
 | `topdown:recipe` | iTXt | 完整配方 JSON（UTF-8，deflate 压缩） |
 
@@ -199,12 +236,12 @@ node cli/tb.js render forest inn --no-meta             :: 关闭内嵌（默认�
 
 ---
 
-## 7. 自测
+## 8. 自测
 
 ```bat
 node cli/selftest.js
 ```
 
-会跑 34 组端到端用例（发现类命令、各种渲染选项、内嵌元信息往返（含网页写入互通）、配方/预设/批量、风格库增删改查、错误路径），
+会跑 37 组端到端用例（发现类命令、各种渲染选项、内嵌元信息往返（含网页写入互通）、配方/预设/批量、风格库增删改查、错误路径），
 临时风格与预设会自动清理，产物默认也在结束时清掉；想留下图片检查就加 `--keep`（留在 `cli/out/selftest/`）。
 改完 CLI 代码后跑一遍，避免回归。

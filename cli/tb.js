@@ -52,6 +52,8 @@ function emit(payload, flags) {
 		if (payload.sheet) lines.push(payload.sheet);
 		if (payload.zip) lines.push(payload.zip);
 		if (payload.recipe) lines.push(payload.recipe);
+		if (payload.prefab) lines.push(payload.prefab);
+		if (payload.prefabTexture) lines.push(payload.prefabTexture);
 		print(lines.length ? lines.join("\n") : JSON.stringify(payload));
 		return;
 	}
@@ -103,7 +105,7 @@ function dryRun(prepared, a) {
 	}, a);
 }
 
-function summarize(cfg, result, written, warnings) {
+function summarize(cfg, result, written, warnings, prefab) {
 	const view = result.view;
 	const payload = {
 		ok: true,
@@ -127,9 +129,27 @@ function summarize(cfg, result, written, warnings) {
 	if (written.recipe) payload.recipe = written.recipe;
 	payload.meta = written.meta;
 	if (written.visible && written.visible.length) payload.visible = written.visible;
+	if (prefab) {
+		payload.prefab = prefab.prefab;
+		payload.prefabTexture = prefab.texture;
+		payload.prefabStats = prefab.stats;
+		if (prefab.stats.clipped) warnings = (warnings || []).concat(["预制体：不透明像素触及画布边缘，多边形可能不完整（加大 --padding 或换 --size）"]);
+	}
 	if (view.fovLimit) payload.note = "FOV≈0，实际按正交渲染";
 	if (warnings && warnings.length) payload.warnings = warnings;
 	return payload;
+}
+
+function godotOptions(a) {
+	return {
+		prefab: a["godot-prefab"],
+		texture: a["godot-texture"],
+		project: a["godot-project"],
+		margin: a["godot-margin"],
+		name: a["godot-name"],
+		meta: a.meta !== false,
+		normalOut: a.out && /\.png$/i.test(String(a.out)) ? path.resolve(String(a.out)) : null
+	};
 }
 
 function runRender(a, base) {
@@ -146,7 +166,9 @@ function runRender(a, base) {
 		saveRecipe: a["save-recipe"],
 		meta: a.meta !== false
 	});
-	emit(summarize(prepared.cfg, result, written, prepared.warnings), a);
+	let prefab = null;
+	if (a["godot-prefab"] !== undefined) prefab = render.writeGodot(prepared.cfg, result, godotOptions(a));
+	emit(summarize(prepared.cfg, result, written, prepared.warnings, prefab), a);
 }
 
 function cmdRender(argv) {
@@ -168,7 +190,9 @@ const JOB_FLAG = {
 	"outline-color-outer": "--outline-color-outer", "outline-color-silhouette": "--outline-color-silhouette",
 	aa: "--aa", bg: "--bg", name: "--name", out: "--out", sheet: "--sheet", zip: "--zip",
 	thumb: "--thumb", "save-recipe": "--save-recipe", "clear-parts": "--clear-parts",
-	"style-file": "--style-file", recipe: "--recipe", preset: "--preset", meta: "--meta"
+	"style-file": "--style-file", recipe: "--recipe", preset: "--preset", meta: "--meta",
+	"godot-prefab": "--godot-prefab", "godot-texture": "--godot-texture",
+	"godot-project": "--godot-project", "godot-margin": "--godot-margin", "godot-name": "--godot-name"
 };
 
 function jobToArgv(job) {
@@ -209,6 +233,8 @@ function cmdBatch(argv) {
 	const started = Date.now();
 	const files = [];
 	const thumbs = [];
+	const prefabs = [];
+	const prefabTextures = [];
 	const errors = [];
 	let done = 0;
 	jobs.forEach(function (job, index) {
@@ -240,6 +266,11 @@ function cmdBatch(argv) {
 			});
 			written.files.forEach(function (file) { files.push(file); });
 			written.thumbs.forEach(function (file) { thumbs.push(file); });
+			if (jobArgs["godot-prefab"] !== undefined) {
+				const prefab = render.writeGodot(prepared.cfg, result, godotOptions(jobArgs));
+				prefabs.push(prefab.prefab);
+				prefabTextures.push(prefab.texture);
+			}
 			done++;
 		} catch (err) {
 			errors.push({ job: index, name: job.name || null, error: String(err.message || err) });
@@ -253,10 +284,17 @@ function cmdBatch(argv) {
 		files: files
 	};
 	if (thumbs.length) payload.thumbs = thumbs;
+	if (prefabs.length) {
+		payload.prefabs = prefabs;
+		payload.prefabTextures = prefabTextures;
+	}
 	if (errors.length) payload.errors = errors;
 	const quiet = a.quiet;
 	if (quiet) {
 		const lines = files.concat(thumbs);
+		if (prefabs.length) {
+			prefabs.forEach(function (file, index) { lines.push(file); lines.push(prefabTextures[index]); });
+		}
 		print(lines.length ? lines.join("\n") : JSON.stringify(payload));
 	} else {
 		print(JSON.stringify(payload));
@@ -360,7 +398,7 @@ function cmdSchema(argv) {
 		version: config.TOOL_VERSION,
 		entry: "node cli/tb.js",
 		commands: {
-			render: "渲染（全参数 / 多方向 / 精灵表 / ZIP / 部件覆盖）",
+			render: "渲染（全参数 / 多方向 / 精灵表 / ZIP / 部件覆盖 / 可选 Godot 预制体）",
 			batch: "单进程批量渲染清单",
 			list: "列出风格/类型/参数/角色/枚举",
 			schema: "本清单",
@@ -393,7 +431,8 @@ function cmdSchema(argv) {
 			value: ["style", "type", "out", "name", "pitch", "proj", "fov", "dirs", "yaw", "size", "scale", "ppm", "padding",
 				"look", "seed", "dseed", "aseed", "outline-inner", "outline-outer", "outline-silhouette",
 				"outline-color", "outline-color-outer", "outline-color-silhouette", "bg", "recipe", "save-recipe",
-				"parts-json", "style-file", "preset"],
+				"parts-json", "style-file", "preset",
+				"godot-prefab", "godot-texture", "godot-project", "godot-margin", "godot-name"],
 			boolean: ["sheet", "zip", "thumb", "json", "quiet", "dry-run", "random", "random-detail", "replay",
 				"aa", "no-aa", "clear-parts", "full", "data-url", "meta", "no-meta"],
 			repeat: ["param", "part"]
@@ -415,15 +454,24 @@ function cmdSchema(argv) {
 		},
 		output: {
 			default: "cli/out/<风格>_<类型>_p<俯角>_<方向数>d.png",
-			summary: "stdout 一行 JSON：ok/style/type/canvas/dirs/pitch/proj/tris/ink/bbox/ms/seeds/files",
+			summary: "stdout 一行 JSON：ok/style/type/canvas/dirs/pitch/proj/tris/ink/bbox/ms/seeds/files（+ prefab/prefabTexture/prefabStats）",
 			quiet: "--quiet 只输出产物路径",
 			errors: "退出码 1，stderr 输出 {ok:false,error,hint}"
+		},
+		godot: {
+			enable: "--godot-prefab <path> --godot-texture <res://...png> [--godot-project <dir>]",
+			nodes: "全内置节点：StaticBody2D > CollisionPolygon2D / Sprite2D / Area2D(遮挡层) > CollisionPolygon2D×N；不挂脚本、不含 StippleShadow",
+			collision: "地基台基（w+0.24 × d+0.24）按当前相机投影后的四边形",
+			occlusion: "同视角不透明覆盖（填内部镂空）扣除碰撞区域后，每块连通区域的外轮廓（Douglas–Peucker 简化）",
+			texture: "额外输出一张裁剪到不透明边界 + margin 的 PNG；普通 PNG 输出不变",
+			constraints: ["预制体取第 1 个方向", "透明背景（默认）", "俯角过低导致地基投影退化时报错"]
 		},
 		examples: [
 			"node cli/tb.js render forest inn -o out/inn.png",
 			"node cli/tb.js render jiangnan house -p 45 -d 4 --sheet --size 512",
 			"node cli/tb.js render desert watchtower --param floors=3 --thumb",
 			"node cli/tb.js render jiangnan house --part roof:tint=#ffcc00 --outline-silhouette 2",
+			"node cli/tb.js render forest inn --godot-project <Godot工程> --godot-texture res://asset/village/buildings/inn.png --godot-prefab res://prefab/village/inn.tscn",
 			"node cli/tb.js inspect out/inn.png",
 			"node cli/tb.js rec apply out/inn.png -o out/again",
 			"node cli/tb.js batch jobs.json"
